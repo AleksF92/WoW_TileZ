@@ -1,0 +1,21 @@
+## Interface: 11404
+## Title: TileZ
+## Version: 1.0.0
+## Author: Aleksander Fimreite
+## Dependencies: 
+## OptDeps: 
+## SavedVariables: LediiData_TileZ
+## SavedVariablesPerCharacter: LediiData_TileZ_Character
+
+DataSetup.lua
+Data/Player/PlayerExperience.lua
+Data/Zones/Mulgore.lua
+Data/Zones/TheBarrens.lua
+
+Constants.lua
+Logger.lua
+Utility.lua
+UI.lua
+Tiling.lua
+Events.lua
+Console.lua
