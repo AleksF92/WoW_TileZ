@@ -8,20 +8,37 @@ local function PrivateClass()
 	local obj = {}
 
 	----- VARIABLES BEGIN -----
+	local debug = true
+
 	local currentXP = 0
 	local nextXP = 0
 	local availableTiles = 0
 	local totalTiles = 0
 	local unlockedTiles = {}
 
-	local tileSize = 25
 	local worldData = nil
 	local mapData = nil
 	local measureData = nil
 	local measureTrigger = false
 	local measureHistory = {}
 	local measureDistance = 0
-	local debug = false
+
+	obj.autoUnlock = false
+	obj.tileSize = 25
+	obj.startCount = 3
+	obj.xpRate = 1.0
+
+	obj.colors = {}
+	obj.colors.currentUnlocked = { r = 0.0, g = 1.0, b = 0.0, a = 1.0 }
+	obj.colors.currentLocked = { r = 1.0, g = 0.0, b = 0.0, a = 1.0 }
+	obj.colors.otherUnlocked = { r = 1.0, g = 1.0, b = 1.0, a = 1.0 }
+
+	obj.textures = {}
+	obj.textures.minimap = "Outline"
+	obj.textures.map = "Outline"
+
+	obj.renderDistance = 3
+
 	----- VARIABLES END -----
 
 
@@ -37,6 +54,21 @@ local function PrivateClass()
 		availableTiles = LediiData_TileZ_Character.availableTiles or 0
 		totalTiles = LediiData_TileZ_Character.totalTiles or 0
 		unlockedTiles = LediiData_TileZ_Character.unlockedTiles or {}
+
+		obj.tileSize = LediiData_TileZ_Character.tileSize or 25
+		obj.startCount = LediiData_TileZ_Character.startCount or 3
+		obj.xpRate = LediiData_TileZ_Character.startCount or 1.0
+
+		obj.colors = LediiData_TileZ_Character.colors or {}
+		obj.colors.currentUnlocked = obj.colors.currentUnlocked or { r = 0.0, g = 1.0, b = 0.0, a = 1.0 }
+		obj.colors.currentLocked = obj.colors.currentLocked or { r = 1.0, g = 0.0, b = 0.0, a = 1.0 }
+		obj.colors.otherUnlocked = obj.colors.otherUnlocked or { r = 1.0, g = 1.0, b = 1.0, a = 1.0 }
+
+		obj.textures = LediiData_TileZ_Character.textures or {}
+		obj.textures.minimap = obj.textures.minimap or "Outline"
+		obj.textures.map = obj.textures.map or "Outline"
+
+		obj.renderDistance = LediiData_TileZ_Character.renderDistance or 3
 	end
 
 	function obj:Save()
@@ -47,6 +79,15 @@ local function PrivateClass()
 		LediiData_TileZ_Character.availableTiles = availableTiles
 		LediiData_TileZ_Character.totalTiles = totalTiles
 		LediiData_TileZ_Character.unlockedTiles = unlockedTiles
+
+		LediiData_TileZ_Character.tileSize = obj.tileSize
+		LediiData_TileZ_Character.startCount = obj.startCount
+		LediiData_TileZ_Character.startCount = obj.xpRate
+
+		LediiData_TileZ_Character.colors = obj.colors
+		LediiData_TileZ_Character.textures = obj.textures
+
+		LediiData_TileZ_Character.renderDistance = obj.renderDistance
 	end
 
 	function obj:Reset()
@@ -95,16 +136,18 @@ local function PrivateClass()
 		local mapX, mapY = C_Map.GetPlayerMapPosition(data.zoneId, "player"):GetXY()
 		data.world = { x = worldX, y = worldY }
 		data.map = { x = mapX, y = mapY }
-		data.tile = { x = worldX / tileSize , y = worldY / tileSize }
+		data.tile = { x = worldX / obj.tileSize , y = worldY / obj.tileSize }
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
-		data.tileSize = tileSize
+		data.tileSize = obj.tileSize
 
 		if (worldData == nil) then return data end
 
 		data.isNewZone = data.zoneId ~= worldData.zoneId
 		if (data.isNewZone) then
 			data.isUnlocked = worldData.isUnlocked
+			obj:UnlockCurrentTile(data)
 		else
+			obj:UnlockCurrentTile(data)
 			local tileKey = string.format("%d_%d", data.tileId.x, data.tileId.y)
 			data.isUnlocked = obj:IsTileUnlocked(tileKey, data.zoneId, data.continentId)
 		end
@@ -215,16 +258,15 @@ local function PrivateClass()
 		return true
 	end
 
-	function obj:UnlockCurrentTile()
-		if (worldData == nil) then return end
+	function obj:UnlockCurrentTile(unlockData)
+		local tileKey = string.format("%d_%d", unlockData.tileId.x, unlockData.tileId.y)
+		local zoneId = unlockData.zoneId
+		local continentId = unlockData.continentId
 
-		local tileKey = string.format("%d_%d", worldData.tileId.x, worldData.tileId.y)
-		local zoneId = worldData.zoneId
-		local continentId = worldData.continentId
-
-		local isZoneBorderException = worldData.isNewZone and worldData.isUnlocked
+		local isZoneBorderException = unlockData.isNewZone and unlockData.isUnlocked
 		local canUnlock = availableTiles > 0 or isZoneBorderException or debug
 
+		if (not obj.autoUnlock and not isZoneBorderException) then return end
 		if (not canUnlock) then return end
 		if (obj:IsTileUnlocked(tileKey, zoneId, continentId)) then return end
 
@@ -232,14 +274,15 @@ local function PrivateClass()
 		unlockedTiles[continentId][zoneId] = unlockedTiles[continentId][zoneId] or {}
 		unlockedTiles[continentId][zoneId][tileKey] = true
 
-		if (debug) then
+		if (isZoneBorderException) then
+			log:Info("Unlocked exception tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+		elseif (debug) then
 			totalTiles = totalTiles + 1
-			log:Info("Unlocked debug tile: " .. worldData.tileId.x .. ", " .. worldData.tileId.y)
-		elseif (isZoneBorderException) then
-			log:Info("Unlocked exception tile: " .. worldData.tileId.x .. ", " .. worldData.tileId.y)
+			log:Info("Unlocked debug tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
 		else
+			totalTiles = totalTiles + 1
 			availableTiles = availableTiles - 1
-			log:Info("Unlocked consumed tile: " .. worldData.tileId.x .. ", " .. worldData.tileId.y)
+			log:Info("Unlocked consumed tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
 		end
 
 		obj:Save()
@@ -265,7 +308,7 @@ local function PrivateClass()
 		while (currentXP >= nextXP) do
 			log:Info(currentXP .. " > " .. nextXP)
 			availableTiles = availableTiles + 1
-			totalTiles = totalTiles + 1
+			--totalTiles = totalTiles + 1
 			currentXP = currentXP - nextXP
 			nextXP = obj:CalculateNextXP(historicLevel)
 			log:Info("+1 Tile Unlocked")
@@ -290,7 +333,7 @@ local function PrivateClass()
 			measureTrigger = false
 		end
 
-		obj:UnlockCurrentTile()
+		--obj:UnlockCurrentTile()
 
 		ui:OnPositionChanged(worldData, mapData, newMeasureData)
 	end

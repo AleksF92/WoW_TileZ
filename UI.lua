@@ -7,14 +7,22 @@ local function PrivateClass()
 	local obj = {}
 
 	----- VARIABLES BEGIN -----
+	local debug = true
+
 	local tilingStatus = {}
 	local tilingMinimap = {}
 	local tilingMap = {}
-	local debug = true
+	local tilingSettings = {}
+	local tilingBlocker = {}
 
 	local whiteTexture = "Interface\\Buttons\\WHITE8x8"
 	local minimapMaskTexture = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
-	local minimapTileTexture = "Interface/Addons/TileZ/Textures/Tile_Outline_4px"
+	local minimapTileTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
+	local settingsTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Cogwheel"
+	local unlockEnabledTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Open"
+	local unlockDisabledTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Closed"
+	local buttonFrameTexture = "Interface\\Buttons\\UI-Panel-Button-Down"
+	local screenCoverTexture = "Interface\\Addons\\TileZ\\Textures\\Screen_Cover"
 	----- VARIABLES END -----
 
 
@@ -24,6 +32,8 @@ local function PrivateClass()
 		obj:SetupTilingStatus()
 		obj:SetupTilingMinimap()
 		obj:SetupTilingMap()
+		obj:SetupTilingSettings()
+		obj:SetupTilingBlocker()
 	end
 
 	function obj:SetupTilingStatus()
@@ -59,6 +69,17 @@ local function PrivateClass()
 			tilingStatus.measureLabel:SetJustifyH("RIGHT")
 			tilingStatus.measureLabel:Show()
 		end
+
+		tilingStatus.settingsButton = obj:CreateButtonFrame("TileZ_SettingsButton", tilingStatus.container, settingsTexture, 10)
+		tilingStatus.settingsButton:SetPoint("RIGHT", tilingStatus.container, "LEFT", 0, 0)
+		tilingStatus.settingsButton:SetSize(40, 40)
+		tilingStatus.settingsButton:SetScript("OnClick", obj.OnSettingsButtonClicked)
+
+		tilingStatus.unlockButton = obj:CreateButtonFrame("TileZ_UnlockButton", tilingStatus.container, unlockDisabledTexture, 10)
+		tilingStatus.unlockButton:SetPoint("LEFT", tilingStatus.container, "RIGHT", 0, 0)
+		tilingStatus.unlockButton:SetSize(40, 40)
+		tilingStatus.unlockButton.frame:SetBackdropColor(1, 0, 0, 0.5)
+		tilingStatus.unlockButton:SetScript("OnClick", obj.OnUnlockButtonClicked)
 	end
 
 	function obj:SetupTilingMinimap()
@@ -80,7 +101,63 @@ local function PrivateClass()
 	end
 
 	function obj:SetupTilingMap()
+		--
+	end
 
+	function obj:SetupTilingSettings()
+		tilingSettings.container = obj:CreateBackdropFrame("Tilez_StatusContainer", tilingStatus.container)
+		tilingSettings.container:SetPoint("TOP", tilingStatus.container, "BOTTOM", 0, 0)
+		tilingSettings.container:SetSize(400, 250)
+		tilingSettings.container:Hide()
+
+		tilingSettings.tileSizeSelector = obj:CreateSelectorFrame(
+			"Tilez_TileSizeSelector", tilingSettings.container,
+			"Tile Size",
+			{ "25 yards", "50 yards", "100 yards" },
+			obj.OnTileSizeSelected
+		)
+		tilingSettings.tileSizeSelector:SetPoint("TOP", tilingSettings.container, "TOP", 0, -10)
+
+		tilingSettings.startTilesSelector = obj:CreateSelectorFrame(
+			"Tilez_StartTilesSelector", tilingSettings.container,
+			"Start Tiles",
+			{ "1x", "2x", "3x" },
+			obj.OnStartTilesSelected
+		)
+		tilingSettings.startTilesSelector:SetPoint("TOP", tilingSettings.tileSizeSelector, "BOTTOM", 0, 0)
+
+		tilingSettings.xpRateSelector = obj:CreateSelectorFrame(
+			"Tilez_XPRateSelector", tilingSettings.container,
+			"XP Rate",
+			{ "1x", "2x", "3x" },
+			obj.OnXPRateSelected
+		)
+		tilingSettings.xpRateSelector:SetPoint("TOP", tilingSettings.startTilesSelector, "BOTTOM", 0, 0)
+
+		tilingSettings.authorLabel = obj:CreateLabelFrame("TileZ_AuthorLabel", tilingSettings.container)
+		tilingSettings.authorLabel:SetPoint("BOTTOM", tilingSettings.container, "BOTTOM", 0, 14)
+		tilingSettings.authorLabel:SetText("TileZ by Ledii")
+		tilingSettings.authorLabel:SetTextColor(0.6, 0.6, 0.6, 1)
+	end
+
+	function obj:SetupTilingBlocker()
+		tilingBlocker.isUnlocked = true
+
+		tilingBlocker.container = obj:CreateContainerFrame("TileZ_BlockerContainer", UIParent)
+		tilingBlocker.container:SetAllPoints(UIParent)
+		tilingBlocker.container:SetFrameStrata("BACKGROUND")
+		UIFrameFadeOut(tilingBlocker.container, 0, 1, 0)
+
+		tilingBlocker.cover = obj:CreateTextureFrame("TileZ_BlockerCover", tilingBlocker.container, screenCoverTexture)
+		tilingBlocker.cover:SetAllPoints(tilingBlocker.container)
+		tilingBlocker.cover.texture:SetVertexColor(0, 0, 0, 1)
+		tilingBlocker.cover:SetFrameLevel(tilingBlocker.container:GetFrameLevel() - 1)
+
+		tilingBlocker.label = obj:CreateLabelFrame("TileZ_BlockerLabel", tilingBlocker.container)
+		tilingBlocker.label:SetPoint("CENTER", tilingBlocker.container, "CENTER", 0, 150)
+		tilingBlocker.label:SetText("This tile is not unlocked yet")
+		local fontFile, fontSize, fontFlags = tilingBlocker.label:GetFont()
+		tilingBlocker.label:SetFont(fontFile, 24, fontFlags)
 	end
 
 	function obj:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
@@ -96,6 +173,16 @@ local function PrivateClass()
 		tilingStatus.positionLabel:SetText(obj:GetPositionText(worldData))
 		tilingStatus.measureLabel:SetText(obj:GetMeasureText(measureData))
 		obj:UpdateMinimapTiles(worldData)
+
+		if (tilingBlocker.isUnlocked ~= worldData.isUnlocked and worldData.isNewZone ~= nil and not worldData.isNewZone == true) then
+			tilingBlocker.isUnlocked = worldData.isUnlocked
+
+			if (tilingBlocker.isUnlocked) then
+				UIFrameFadeOut(tilingBlocker.container, 0.25, 1, 0)
+			else
+				UIFrameFadeIn(tilingBlocker.container, 0.25, 0, 1)
+			end
+		end
 	end
 	----- PUBLIC END -----
 
@@ -212,6 +299,55 @@ local function PrivateClass()
 
 		return offsetX, 0
 	end
+
+	function obj:OnSettingsButtonClicked()
+		if (tilingSettings.container:IsShown()) then
+			tilingSettings.container:Hide()
+		else
+			tilingSettings.container:Show()
+		end
+	end
+
+	function obj:OnUnlockButtonClicked()
+		local tiling = _G.LEDII_TILE_TILING
+		tiling.autoUnlock = not tiling.autoUnlock
+
+		if (tiling.autoUnlock) then
+			tilingStatus.unlockButton.icon:SetTexture(unlockEnabledTexture, "REPEAT", "REPEAT")
+			tilingStatus.unlockButton.frame:SetBackdropColor(0, 1, 0, 0.5)
+		else
+			tilingStatus.unlockButton.icon:SetTexture(unlockDisabledTexture, "REPEAT", "REPEAT")
+			tilingStatus.unlockButton.frame:SetBackdropColor(1, 0, 0, 0.5)
+		end
+	end
+
+	function obj:OnTileSizeSelected(index)
+		--log:Info("OnTileSizeSelected: " .. index)
+
+		local tiling = _G.LEDII_TILE_TILING
+		local values = { 25, 50, 100 }
+		tiling.tileSize = values[index]
+
+		for i = 1, 5 do
+			MinimapZoomIn:Click()
+		end
+	end
+
+	function obj:OnStartTilesSelected(index)
+		--log:Info("OnStartTilesSelected: " .. index)
+
+		local tiling = _G.LEDII_TILE_TILING
+		local values = { 1.0, 2.0, 3.0 }
+		tiling.startCount = values[index]
+	end
+
+	function obj:OnXPRateSelected(index)
+		--log:Info("OnXPRateSelected: " .. index)
+
+		local tiling = _G.LEDII_TILE_TILING
+		local values = { 1.0, 2.0, 3.0 }
+		tiling.xpRate = values[index]
+	end
 	----- PRIVATE END -----
 
 
@@ -219,9 +355,6 @@ local function PrivateClass()
 	----- UTILITY BEGIN -----
 	function obj:CreateContainerFrame(name, parent)
 		local container = CreateFrame("Frame", name, parent)
-
-		container:SetSize(parent:GetSize())
-		container:SetAllPoints(parent)
 
 		return container
 	end
@@ -263,8 +396,48 @@ local function PrivateClass()
 		return frame
 	end
 
-	function obj:CreateTemplateFrame()
+	function obj:CreateButtonFrame(name, parent, iconFile, insets)
+		local button = CreateFrame("Button", name, parent)
 
+		button:SetNormalFontObject("GameFontNormalLarge")
+		local normalFont = button:GetNormalFontObject()
+		normalFont:SetTextColor(1, 1, 1, 1)
+		button:SetNormalFontObject(normalFont)
+
+		button:SetHighlightFontObject("GameFontHighlightLarge")
+		local highlightFont = button:GetHighlightFontObject()
+		highlightFont:SetTextColor(1, 1, 1, 1)
+		button:SetHighlightFontObject(highlightFont)
+
+		button.frame = obj:CreateBackdropFrame(name .. "_Frame", button, whiteTexture)
+		button.frame:SetAllPoints(button)
+		button.frame:SetBackdropColor(0, 0, 0, 0.5)
+		button.frame:SetFrameLevel(button:GetFrameLevel() - 1)
+
+		if (iconFile ~= nil) then
+			button.icon = button.frame:CreateTexture(nil, "ARTWORK")
+			button.icon:SetTexture(iconFile, "REPEAT", "REPEAT")
+
+			insets = insets or 0 
+			button.icon:SetPoint("TOPLEFT", button.frame, "TOPLEFT", insets, -insets)
+			button.icon:SetPoint("BOTTOMRIGHT", button.frame, "BOTTOMRIGHT", -insets, insets)
+
+			button:SetScript("OnMouseDown", function(self)
+				self.icon:SetPoint("TOPLEFT", self, "TOPLEFT", insets, -insets - 2)
+				self.icon:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -insets, insets - 2)
+			end)
+
+			button:SetScript("OnMouseUp", function(self)
+				self.icon:SetPoint("TOPLEFT", self, "TOPLEFT", insets, -insets)
+				self.icon:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -insets, insets)
+			end)
+		end
+
+		return button
+	end
+
+	function obj:CreateTemplateFrame()
+		--
 	end
 
 	function obj:CreateLabelFrame(name, parent, fontTemplate)
@@ -321,6 +494,63 @@ local function PrivateClass()
 		end)
 
 		return xpBar
+	end
+
+	function obj:CreateSelectorFrame(name, parent, label, options, callback)
+		local selector = obj:CreateContainerFrame(name .. "_Container", parent)
+		selector:SetSize(parent:GetWidth(), 30)
+		selector.index = 1
+
+		local widthInset = 20
+		local nameWidth = (selector:GetWidth() * 0.5) - widthInset
+		local valueWidth = (selector:GetWidth() * 0.5) - widthInset
+		local buttonSize = 28
+
+		selector.nameLabel = obj:CreateLabelFrame(name .. "_Label", selector)
+		selector.nameLabel:SetText(label or "Property name")
+		selector.nameLabel:SetPoint("LEFT", selector, "LEFT", 20, 0)
+		selector.nameLabel:SetSize(nameWidth, selector:GetHeight())
+		selector.nameLabel:SetJustifyH("LEFT")
+
+		selector.valueLabel = obj:CreateLabelFrame(name .. "_Label", selector)
+		selector.valueLabel:SetText("?")
+		selector.valueLabel:SetPoint("RIGHT", selector, "RIGHT", -20, 0)
+		selector.valueLabel:SetSize(valueWidth, selector:GetHeight())
+
+		if (options ~= nil) then
+			local option = options[selector.index]
+			if (option ~= nil) then
+				selector.valueLabel:SetText(option)
+			end
+		end
+
+		selector.previous = obj:CreateButtonFrame(name .. "_PreviousButton", selector)
+		selector.previous:SetText("<")
+		selector.previous:SetPoint("LEFT", selector.valueLabel, "LEFT", 0, 0)
+		selector.previous:SetSize(buttonSize, buttonSize)
+		selector.previous.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
+		selector.previous:SetScript("OnClick", function()
+			selector.index = ((selector.index - 1 - 1 + #options) % #options) + 1
+			selector.valueLabel:SetText(options[selector.index])
+			if (callback ~= nil) then
+				callback(nil, selector.index)
+			end
+		end)
+
+		selector.next = obj:CreateButtonFrame(name .. "_NextButton", selector)
+		selector.next:SetText(">")
+		selector.next:SetPoint("RIGHT", selector.valueLabel, "RIGHT", 0, 0)
+		selector.next:SetSize(buttonSize, buttonSize)
+		selector.next.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
+		selector.next:SetScript("OnClick", function()
+			selector.index = ((selector.index - 1 + 1 + #options) % #options) + 1
+			selector.valueLabel:SetText(options[selector.index])
+			if (callback ~= nil) then
+				callback(nil, selector.index)
+			end
+		end)
+
+		return selector
 	end
 	----- UTILITY END -----
 
