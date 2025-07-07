@@ -144,6 +144,7 @@ local function PrivateClass()
 		data.tile = { x = worldX / obj.tileSize , y = worldY / obj.tileSize }
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
 		data.tileSize = obj.tileSize
+		data.tileKey = obj:GetTileKey(data.tile.x, data.tile.y)
 
 		if (worldData == nil) then return data end
 
@@ -153,8 +154,7 @@ local function PrivateClass()
 			obj:UnlockCurrentTile(data)
 		else
 			obj:UnlockCurrentTile(data)
-			local tileKey = obj:GetTileKey(data.tile.x, data.tile.y)
-			data.isUnlocked = obj:IsTileUnlocked(tileKey, data.zoneId, data.continentId)
+			data.isUnlocked = obj:IsTileUnlocked(data.tileKey, data.zoneId, data.continentId)
 		end
 
 		return data
@@ -165,6 +165,7 @@ local function PrivateClass()
 		data.isVisible = WorldMapFrame:IsVisible()
 		data.height = WorldMapFrame.ScrollContainer:GetHeight()
 		data.width = WorldMapFrame.ScrollContainer:GetWidth()
+		data.unlockedTiles = unlockedTiles
 
 		data.zoneId = WorldMapFrame:GetMapID()
 		if (data.zoneId == 0) then return nil end
@@ -190,11 +191,12 @@ local function PrivateClass()
 		data.zoneEstimation = zoneData.estimatedArea
 		if (data.zoneEstimation == nil) then return data end
 
+		local est = data.zoneEstimation
 		data.bounds = {}
-		data.bounds.west = data.zoneEstimation.refWorldX - (data.zoneEstimation.refMapX * data.zoneEstimation.width)	--Negative X
-		data.bounds.east = data.bounds.west + data.zoneEstimation.width													--Positive X
-		data.bounds.south = data.zoneEstimation.refWorldY - (data.zoneEstimation.refMapY * data.zoneEstimation.height)	--Negative Y
-		data.bounds.north = data.bounds.south + data.zoneEstimation.height												--Positive Y
+		data.bounds.west = est.refWorldX + (est.refMapX * est.width)	--Negative X
+		data.bounds.east = data.bounds.west - est.width					--Positive X
+		data.bounds.north = est.refWorldY + (est.refMapY * est.height)	--Negative Y
+		data.bounds.south = data.bounds.north - est.height				--Positive Y
 
 		return data
 	end
@@ -309,13 +311,12 @@ local function PrivateClass()
 		local x = utils:TruncateNumber(tileX) .. ""
 		local y = utils:TruncateNumber(tileY) .. ""
 
+		--Ensure minus on zero values
 		if (tileX < 0) then
-			x = "-" .. x
+			x = "-" .. math.abs(x)
 		end
-
-		
 		if (tileY < 0) then
-			y = "-" .. y
+			y = "-" .. math.abs(y)
 		end
 
 		return x .. "_" .. y

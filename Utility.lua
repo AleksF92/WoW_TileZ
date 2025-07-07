@@ -148,13 +148,13 @@ local function class()
 		end
 	end
 
-	function obj:IndexOf(inTable, value)
+	function obj:IndexOf(inTable, value, default)
 		for i, v in ipairs(inTable) do
 			if v == value then
 				return i
 			end
 		end
-		return nil -- not found
+		return default -- not found
 	end
 
 	return obj

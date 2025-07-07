@@ -25,9 +25,10 @@ local function PrivateClass()
 	local buttonFrameTexture = "Interface\\Buttons\\UI-Panel-Button-Down"
 	local screenCoverTexture = "Interface\\Addons\\TileZ\\Textures\\Screen_Cover"
 
-	local tileSizeOptions = { 25, 50, 100 }
+	local tileSizeOptions = { 50, 100, 150, 200 }
 	local startTilesOptions = { 1.0, 2.0, 3.0 }
 	local xpRateOptions = { 1.0, 2.0, 3.0 }
+	local refreshMap = false
 	----- VARIABLES END -----
 
 
@@ -109,6 +110,7 @@ local function PrivateClass()
 		tilingMap.lastZoneId = 0
 		tilingMap.lastHeight = 0
 		tilingMap.lastVisible = false
+		tilingMap.lastTileId = {}
 
 		tilingMap.gridMask = obj:CreateContainerFrame("TileZ_MapGridMask", WorldMapFrame.ScrollContainer)
 		tilingMap.gridMask:SetAllPoints(WorldMapFrame.ScrollContainer)
@@ -122,6 +124,8 @@ local function PrivateClass()
 		tilingMap.player.texture:SetVertexColor(1, 0, 1, 1)
 		tilingMap.player:SetFrameStrata("DIALOG")
 		tilingMap.player:Hide()
+
+		tilingMap.tileFrames = {}
 	end
 
 	function obj:SetupTilingSettings()
@@ -134,7 +138,7 @@ local function PrivateClass()
 
 		tilingSettings.tileSizeSelector = obj:CreateSelectorFrame(
 			"Tilez_TileSizeSelector", tilingSettings.container,
-			"Tile Size", { "25 yards", "50 yards", "100 yards" },
+			"Tile Size", { "50 yards", "100 yards", "150 yards", "200 yards" },
 			utils:IndexOf(tileSizeOptions, tiling.tileSize), obj.OnTileSizeSelected
 		)
 		tilingSettings.tileSizeSelector:SetPoint("TOP", tilingSettings.container, "TOP", 0, -10)
@@ -233,17 +237,22 @@ local function PrivateClass()
 			if (
 				(mapData.isVisible ~= tilingMap.lastVisible) or
 				(mapData.height ~= tilingMap.lastHeight) or
-				(mapData.zoneId ~= tilingMap.lastZoneId)
+				(mapData.zoneId ~= tilingMap.lastZoneId) or
+				(worldData.tileId.x ~= tilingMap.lastTileId.x) or
+				(worldData.tileId.y ~= tilingMap.lastTileId.y) or
+				refreshMap
 			) then
 				tilingMap.lastVisible = mapData.isVisible
 				tilingMap.lastHeight = mapData.height
 				tilingMap.lastZoneId = mapData.zoneId
-				obj:OnMapChanged(mapData)
+				tilingMap.lastTileId = worldData.tileId
+				refreshMap = false
+				obj:OnMapChanged(mapData, worldData)
 			end
 		end
 	end
 
-	function obj:OnMapChanged(mapData)
+	function obj:OnMapChanged(mapData, worldData)
 		local tiling = _G.LEDII_TILE_TILING
 
 		--Setup visibility
@@ -253,34 +262,48 @@ local function PrivateClass()
 		else
 			tilingMap.grid:Hide()
 			log:Info("Zone estimation missing! (" .. mapData.zoneName .. " | " .. mapData.zoneId .. ")")
+			obj:UpdateMapTiles(mapData, worldData)
 			return
 		end
 
 		--Setup tiling
-		local tileCount = mapData.zoneEstimation.height / tiling.tileSize
-		local tileSize = mapData.height / tileCount
+		local pixelsPerWorldUnit = mapData.width / mapData.zoneEstimation.width
+		local tilePixelSize = tiling.tileSize * pixelsPerWorldUnit
 
 		tilingMap.grid:SetBackdrop({
 			bgFile = mapGridTexture,
 			tile = true,
-			tileSize = tileSize
+			tileSize = tilePixelSize
 		})
 		tilingMap.grid:SetBackdropColor(1, 1, 1, 0.25)
 
-		local sizeX = mapData.width + (tileSize * 2)
-		local sizeY = mapData.height + (tileSize * 2)
+		local sizeX = mapData.width + (tilePixelSize * 2)
+		local sizeY = mapData.height + (tilePixelSize * 2)
 		tilingMap.grid:SetSize(sizeX, sizeY)
 
-		local offsetX = mapData.bounds.west - utils:TruncateNumber(mapData.bounds.west)
-		local offsetY = mapData.bounds.north - utils:TruncateNumber(mapData.bounds.north)
-		local posX = -tileSize - (tileSize * offsetX)-- - 1
-		local posY = tileSize + (tileSize * offsetY)-- - 3
-		tilingMap.grid:SetPoint("TOPLEFT", posX, posY)
+		local tileW = mapData.bounds.west / tiling.tileSize
+		local tileN = mapData.bounds.north / tiling.tileSize
+		local relTileW = (tileW - utils:TruncateNumber(tileW))
+		local relTileN = (tileN - utils:TruncateNumber(tileN))
+		local offsetW = relTileW * tilePixelSize
+		local offsetN = relTileN * tilePixelSize
+		offsetW = utils:Turnary(offsetW < 0, offsetW, -offsetW)
+		offsetN = utils:Turnary(offsetN < 0, -offsetN, offsetN)
 
-		--log:Info(string.format("Zone offset: %.2f, %.2f", offsetX, offsetY))
-		--log:Info(string.format("Zone bounds: %d W <-> %d E, %d S <-> %d N",
-			--mapData.bounds.west, mapData.bounds.east, mapData.bounds.south, mapData.bounds.north)
-		--)
+		--log:Info(string.format("Zone offset: %.2f, %.2f | %.2f, %.2f | %.2f, %.2f",
+		--tileW, tileN, relTileW, relTileN, offsetW, offsetN))
+
+		log:Info(string.format("Zone boundary: %.2fW | %.2fE | %.2fS | %.2fN",
+		mapData.bounds.west, mapData.bounds.east,
+		mapData.bounds.south, mapData.bounds.north))
+
+		--log:Info(string.format("Zone ref: %.2f, %.2f | %.2f, %.2f",
+		--mapData.zoneEstimation.refWorldX, mapData.zoneEstimation.refWorldY,
+		--mapData.zoneEstimation.refMapX, mapData.zoneEstimation.refMapY))
+
+		tilingMap.grid:SetPoint("TOPLEFT", offsetW, offsetN)
+
+		obj:UpdateMapTiles(mapData, worldData)
 	end
 	----- PUBLIC END -----
 
@@ -345,9 +368,9 @@ local function PrivateClass()
 		local tiling = _G.LEDII_TILE_TILING
 		local frameIndex = 1
 		local tileParent = tilingMinimap.container
-		local extent = 1
+		local extent = 2
 		local drawDirectionX = -1
-		local drawDirectionY = 1
+		local drawDirectionY = -1
 
 		for offsetY = -extent, extent do
 			for offsetX = -extent, extent do
@@ -374,7 +397,7 @@ local function PrivateClass()
 					end
 
 					--Update tile
-					obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked)
+					obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked, 0.4)
 					tileFrame:ClearAllPoints()
 					tileFrame:SetSize(frameSize, frameSize)
 					tileFrame:SetPoint("CENTER", tileParent, "CENTER", framePosX, framePosY)
@@ -386,13 +409,83 @@ local function PrivateClass()
 		end
 	end
 
-	function obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked)
+	function obj:UpdateMapTiles(mapData, worldData)
+		--Hide current tiles
+		for i = 1, #tilingMap.tileFrames do
+			tilingMap.tileFrames[i]:Hide()
+		end
+
+		if (mapData.zoneEstimation == nil) then return end
+
+		local tiling = _G.LEDII_TILE_TILING
+		local tileW = utils:TruncateNumber(mapData.bounds.west / tiling.tileSize)
+		local tileN = utils:TruncateNumber(mapData.bounds.north / tiling.tileSize)
+		local pixelsPerWorldUnit = mapData.width / mapData.zoneEstimation.width
+		local tilePixelSize = tiling.tileSize * pixelsPerWorldUnit
+
+		--Show unlocked tiles
+		local frameIndex = 1
+		local tileParent = tilingMap.grid
+		local unlockedZoneTiles = utils:CloneTableShallow(
+			mapData.unlockedTiles[mapData.continentId][mapData.zoneId]
+		)
+		if (unlockedZoneTiles == nil) then
+			unlockedZoneTiles = {}
+		end
+
+		if (mapData.zoneId == worldData.zoneId) then
+			unlockedZoneTiles[worldData.tileKey] = true
+		end
+		
+		for key, value in pairs(unlockedZoneTiles) do
+			local keyParts = utils:Split(key, "_")
+			local tileIdX = tonumber(keyParts[1])
+			local tileIdY = tonumber(keyParts[2])
+
+			local deltaX = tileIdX - tileW
+			local deltaY = tileIdY - tileN
+			local framePosX = -deltaX * tilePixelSize
+			local framePosY = deltaY * tilePixelSize
+
+			local isPlayerTile = (key == worldData.tileKey)
+			local isUnlocked = utils:Turnary(isPlayerTile, worldData.isUnlocked, true)
+
+			--Initialize tile
+			local tileFrame = tilingMap.tileFrames[frameIndex]
+			if (tileFrame == nil) then
+				local name = "TileZ_Section_" .. frameIndex
+				tileFrame = obj:CreateTextureFrame(name, tileParent, minimapTileTexture)
+				table.insert(tilingMap.tileFrames, tileFrame)
+			end
+
+			--Update tile
+			obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked)
+			tileFrame:ClearAllPoints()
+			tileFrame:SetSize(tilePixelSize, tilePixelSize)
+			tileFrame:SetPoint("TOPLEFT", tileParent, "TOPLEFT", framePosX, framePosY)
+			tileFrame:Show()
+
+			local strata = utils:Turnary(isPlayerTile, "TOOLTIP", "MEDIUM")
+			tileFrame:SetFrameStrata(strata)
+
+			frameIndex = frameIndex + 1
+		end
+	end
+
+	function obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked, alpha)
+		local tiling = _G.LEDII_TILE_TILING
+		local a = alpha or 1.0
+		local glowA = math.min(1.0, a * 2)
+
 		if (isPlayerTile and isUnlocked) then
-			tileFrame.texture:SetVertexColor(1, 1, 1, 0.75)
+			local color = tiling.colors.currentUnlocked
+			tileFrame.texture:SetVertexColor(color.r, color.g, color.b, glowA)
 		elseif (isPlayerTile) then
-			tileFrame.texture:SetVertexColor(1, 0, 0, 0.75)
+			local color = tiling.colors.currentLocked
+			tileFrame.texture:SetVertexColor(color.r, color.g, color.b, glowA)
 		elseif (isUnlocked) then
-			tileFrame.texture:SetVertexColor(0, 1, 0, 0.5)
+			local color = tiling.colors.otherUnlocked
+			tileFrame.texture:SetVertexColor(color.r, color.g, color.b, a)
 		end
 	end
 
@@ -436,6 +529,7 @@ local function PrivateClass()
 		for i = 1, 5 do
 			MinimapZoomIn:Click()
 		end
+		refreshMap = true
 	end
 
 	function obj:OnStartTilesSelected(index)
