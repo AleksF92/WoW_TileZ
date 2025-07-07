@@ -140,6 +140,23 @@ local function class()
 		end
 	end
 
+	function obj:Turnary(condition, valueA, valueB)
+		if (condition) then
+			return valueA
+		else
+			return valueB
+		end
+	end
+
+	function obj:IndexOf(inTable, value)
+		for i, v in ipairs(inTable) do
+			if v == value then
+				return i
+			end
+		end
+		return nil -- not found
+	end
+
 	return obj
 end
 

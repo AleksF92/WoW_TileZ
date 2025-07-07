@@ -25,4 +25,4 @@ data.units = {
 	{ 3076, "Moorat Longstride", 12, 12, "General Goods", "Humanoid" }
 }
 
-ledii.zones["Mulgore"] = data
+ledii.zones[1412] = data

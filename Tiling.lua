@@ -127,7 +127,12 @@ local function PrivateClass()
 	function obj:GetWorldPositionData()
 		local data = {}
 
+		--Test for special map change null cases
+		--if (true) then return nil end
+
 		data.zoneId = C_Map.GetBestMapForUnit("player")
+
+		if (data.zoneId == nil) then return nil end
 		data.zoneName = C_Map.GetMapInfo(data.zoneId).name
 		data.continentId = C_Map.GetMapInfo(data.zoneId).parentMapID
 		data.continentName = C_Map.GetMapInfo(data.continentId).name
@@ -148,7 +153,7 @@ local function PrivateClass()
 			obj:UnlockCurrentTile(data)
 		else
 			obj:UnlockCurrentTile(data)
-			local tileKey = string.format("%d_%d", data.tileId.x, data.tileId.y)
+			local tileKey = obj:GetTileKey(data.tile.x, data.tile.y)
 			data.isUnlocked = obj:IsTileUnlocked(tileKey, data.zoneId, data.continentId)
 		end
 
@@ -157,29 +162,39 @@ local function PrivateClass()
 
 	function obj:GetMapPositionData()
 		local data = {}
+		data.isVisible = WorldMapFrame:IsVisible()
+		data.height = WorldMapFrame.ScrollContainer:GetHeight()
+		data.width = WorldMapFrame.ScrollContainer:GetWidth()
+
 		data.zoneId = WorldMapFrame:GetMapID()
+		if (data.zoneId == 0) then return nil end
 		data.zoneName = C_Map.GetMapInfo(data.zoneId).name
+
 		data.continentId = C_Map.GetMapInfo(data.zoneId).parentMapID
+		if (data.continentId == 0) then
+			--Exception for Azeroth
+			data.continentId = data.zoneId
+		end
 
 		if (data.continentId == 0) then return nil end
 		data.continentName = C_Map.GetMapInfo(data.continentId).name
 
 		local mapPos = C_Map.GetPlayerMapPosition(data.zoneId, "player")
-		if (mapPos == nil) then return data end
+		if (mapPos ~= nil) then
+			local mapX, mapY = mapPos:GetXY()
+			data.map = { x = mapX, y = mapY }
+		end
 
-		local mapX, mapY = mapPos:GetXY()
-		data.map = { x = mapX, y = mapY }
-
-		local zoneData = ledii.zones[data.zoneName]
+		local zoneData = ledii.zones[data.zoneId]
 		if (zoneData == nil) then return data end
-		local zoneEstimation = zoneData.estimatedArea
-		if (zoneEstimation == nil) then return data end
+		data.zoneEstimation = zoneData.estimatedArea
+		if (data.zoneEstimation == nil) then return data end
 
 		data.bounds = {}
-		data.bounds.west = zoneEstimation.refWorldX - (zoneEstimation.refMapX * zoneEstimation.width)	--Negative X
-		data.bounds.east = data.bounds.west + zoneEstimation.width										--Positive X
-		data.bounds.south = zoneEstimation.refWorldY - (zoneEstimation.refMapY * zoneEstimation.height)	--Negative Y
-		data.bounds.north = data.bounds.south + zoneEstimation.height									--Positive Y
+		data.bounds.west = data.zoneEstimation.refWorldX - (data.zoneEstimation.refMapX * data.zoneEstimation.width)	--Negative X
+		data.bounds.east = data.bounds.west + data.zoneEstimation.width													--Positive X
+		data.bounds.south = data.zoneEstimation.refWorldY - (data.zoneEstimation.refMapY * data.zoneEstimation.height)	--Negative Y
+		data.bounds.north = data.bounds.south + data.zoneEstimation.height												--Positive Y
 
 		return data
 	end
@@ -187,6 +202,7 @@ local function PrivateClass()
 	function obj:GetMeasurePositionData()
 		local data = {}
 
+		if (worldData == nil) then return nil end
 		data.zoneId = worldData.zoneId
 		data.zoneName = worldData.zoneName
 		data.world = { x = worldData.world.x, y = worldData.world.y }
@@ -259,7 +275,7 @@ local function PrivateClass()
 	end
 
 	function obj:UnlockCurrentTile(unlockData)
-		local tileKey = string.format("%d_%d", unlockData.tileId.x, unlockData.tileId.y)
+		local tileKey = obj:GetTileKey(unlockData.tile.x, unlockData.tile.y)
 		local zoneId = unlockData.zoneId
 		local continentId = unlockData.continentId
 
@@ -287,6 +303,22 @@ local function PrivateClass()
 
 		obj:Save()
 		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+	end
+
+	function obj:GetTileKey(tileX, tileY)
+		local x = utils:TruncateNumber(tileX) .. ""
+		local y = utils:TruncateNumber(tileY) .. ""
+
+		if (tileX < 0) then
+			x = "-" .. x
+		end
+
+		
+		if (tileY < 0) then
+			y = "-" .. y
+		end
+
+		return x .. "_" .. y
 	end
 	----- UTILITY END -----
 
@@ -348,7 +380,8 @@ local function PrivateClass()
 			)
 
 			local refData = {}
-			refData.refZone = worldData.zoneName
+			refData.refZoneId = worldData.zoneId
+			refData.refZoneName = worldData.zoneName
 			refData.refWorldX = worldData.world.x
 			refData.refWorldY = worldData.world.y
 			refData.refMapX = worldData.map.x

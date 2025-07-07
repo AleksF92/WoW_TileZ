@@ -12,4 +12,4 @@ data.units = {
 
 }
 
-ledii.zones["The Barrens"] = data
+ledii.zones[1413] = data

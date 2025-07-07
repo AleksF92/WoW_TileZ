@@ -18,11 +18,16 @@ local function PrivateClass()
 	local whiteTexture = "Interface\\Buttons\\WHITE8x8"
 	local minimapMaskTexture = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 	local minimapTileTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
+	local mapGridTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
 	local settingsTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Cogwheel"
 	local unlockEnabledTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Open"
 	local unlockDisabledTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Closed"
 	local buttonFrameTexture = "Interface\\Buttons\\UI-Panel-Button-Down"
 	local screenCoverTexture = "Interface\\Addons\\TileZ\\Textures\\Screen_Cover"
+
+	local tileSizeOptions = { 25, 50, 100 }
+	local startTilesOptions = { 1.0, 2.0, 3.0 }
+	local xpRateOptions = { 1.0, 2.0, 3.0 }
 	----- VARIABLES END -----
 
 
@@ -101,10 +106,27 @@ local function PrivateClass()
 	end
 
 	function obj:SetupTilingMap()
-		--
+		tilingMap.lastZoneId = 0
+		tilingMap.lastHeight = 0
+		tilingMap.lastVisible = false
+
+		tilingMap.gridMask = obj:CreateContainerFrame("TileZ_MapGridMask", WorldMapFrame.ScrollContainer)
+		tilingMap.gridMask:SetAllPoints(WorldMapFrame.ScrollContainer)
+		tilingMap.gridMask:SetClipsChildren(true)
+		tilingMap.gridMask:SetFrameStrata("HIGH")
+
+		tilingMap.grid = obj:CreateBackdropFrame("TileZ_MapGrid", tilingMap.gridMask)
+
+		tilingMap.player = obj:CreateTextureFrame("TileZ_PlayerDot", WorldMapFrame.ScrollContainer, whiteTexture)
+		tilingMap.player:SetSize(2, 2)
+		tilingMap.player.texture:SetVertexColor(1, 0, 1, 1)
+		tilingMap.player:SetFrameStrata("DIALOG")
+		tilingMap.player:Hide()
 	end
 
 	function obj:SetupTilingSettings()
+		local tiling = _G.LEDII_TILE_TILING
+
 		tilingSettings.container = obj:CreateBackdropFrame("Tilez_StatusContainer", tilingStatus.container)
 		tilingSettings.container:SetPoint("TOP", tilingStatus.container, "BOTTOM", 0, 0)
 		tilingSettings.container:SetSize(400, 250)
@@ -112,25 +134,22 @@ local function PrivateClass()
 
 		tilingSettings.tileSizeSelector = obj:CreateSelectorFrame(
 			"Tilez_TileSizeSelector", tilingSettings.container,
-			"Tile Size",
-			{ "25 yards", "50 yards", "100 yards" },
-			obj.OnTileSizeSelected
+			"Tile Size", { "25 yards", "50 yards", "100 yards" },
+			utils:IndexOf(tileSizeOptions, tiling.tileSize), obj.OnTileSizeSelected
 		)
 		tilingSettings.tileSizeSelector:SetPoint("TOP", tilingSettings.container, "TOP", 0, -10)
 
 		tilingSettings.startTilesSelector = obj:CreateSelectorFrame(
 			"Tilez_StartTilesSelector", tilingSettings.container,
-			"Start Tiles",
-			{ "1x", "2x", "3x" },
-			obj.OnStartTilesSelected
+			"Start Tiles", { "1x", "2x", "3x" },
+			utils:IndexOf(startTilesOptions, tiling.startCount), obj.OnStartTilesSelected
 		)
 		tilingSettings.startTilesSelector:SetPoint("TOP", tilingSettings.tileSizeSelector, "BOTTOM", 0, 0)
 
 		tilingSettings.xpRateSelector = obj:CreateSelectorFrame(
 			"Tilez_XPRateSelector", tilingSettings.container,
-			"XP Rate",
-			{ "1x", "2x", "3x" },
-			obj.OnXPRateSelected
+			"XP Rate", { "1x", "2x", "3x" },
+			utils:IndexOf(xpRateOptions, tiling.xpRate), obj.OnXPRateSelected
 		)
 		tilingSettings.xpRateSelector:SetPoint("TOP", tilingSettings.startTilesSelector, "BOTTOM", 0, 0)
 
@@ -170,19 +189,98 @@ local function PrivateClass()
 	end
 
 	function obj:OnPositionChanged(worldData, mapData, measureData)
+		--Update label info
 		tilingStatus.positionLabel:SetText(obj:GetPositionText(worldData))
 		tilingStatus.measureLabel:SetText(obj:GetMeasureText(measureData))
+
+		--Update minimap tiles
 		obj:UpdateMinimapTiles(worldData)
 
+		if (worldData == nil) then
+			if (not tilingBlocker.isUnlocked) then
+				tilingBlocker.isUnlocked = true
+				UIFrameFadeOut(tilingBlocker.container, 0.25, 1, 0)
+				tilingMap.player:Hide()
+			end
+			return
+		end
+
+		--Show blocker for current tile if nessesary
 		if (tilingBlocker.isUnlocked ~= worldData.isUnlocked and worldData.isNewZone ~= nil and not worldData.isNewZone == true) then
 			tilingBlocker.isUnlocked = worldData.isUnlocked
 
-			if (tilingBlocker.isUnlocked) then
-				UIFrameFadeOut(tilingBlocker.container, 0.25, 1, 0)
-			else
-				UIFrameFadeIn(tilingBlocker.container, 0.25, 0, 1)
+			if (not debug) then
+				if (tilingBlocker.isUnlocked) then
+					UIFrameFadeOut(tilingBlocker.container, 0.25, 1, 0)
+				else
+					UIFrameFadeIn(tilingBlocker.container, 0.25, 0, 1)
+				end
 			end
 		end
+
+		if (mapData ~= nil) then
+			--Set player dot
+			if (mapData.map ~= nil) then
+				local playerX = mapData.map.x * WorldMapFrame.ScrollContainer:GetWidth()
+				local playerY = -mapData.map.y * WorldMapFrame.ScrollContainer:GetHeight()
+				tilingMap.player:SetPoint("CENTER", WorldMapFrame.ScrollContainer, "TOPLEFT", playerX, playerY)
+				tilingMap.player:Show()
+			else
+				tilingMap.player:Hide()
+			end
+
+			--Check for map changes
+			if (
+				(mapData.isVisible ~= tilingMap.lastVisible) or
+				(mapData.height ~= tilingMap.lastHeight) or
+				(mapData.zoneId ~= tilingMap.lastZoneId)
+			) then
+				tilingMap.lastVisible = mapData.isVisible
+				tilingMap.lastHeight = mapData.height
+				tilingMap.lastZoneId = mapData.zoneId
+				obj:OnMapChanged(mapData)
+			end
+		end
+	end
+
+	function obj:OnMapChanged(mapData)
+		local tiling = _G.LEDII_TILE_TILING
+
+		--Setup visibility
+		if (mapData.zoneEstimation ~= nil) then
+			tilingMap.grid:Show()
+			--log:Info("Zone estimation valid. Calculating tiles...")
+		else
+			tilingMap.grid:Hide()
+			log:Info("Zone estimation missing! (" .. mapData.zoneName .. " | " .. mapData.zoneId .. ")")
+			return
+		end
+
+		--Setup tiling
+		local tileCount = mapData.zoneEstimation.height / tiling.tileSize
+		local tileSize = mapData.height / tileCount
+
+		tilingMap.grid:SetBackdrop({
+			bgFile = mapGridTexture,
+			tile = true,
+			tileSize = tileSize
+		})
+		tilingMap.grid:SetBackdropColor(1, 1, 1, 0.25)
+
+		local sizeX = mapData.width + (tileSize * 2)
+		local sizeY = mapData.height + (tileSize * 2)
+		tilingMap.grid:SetSize(sizeX, sizeY)
+
+		local offsetX = mapData.bounds.west - utils:TruncateNumber(mapData.bounds.west)
+		local offsetY = mapData.bounds.north - utils:TruncateNumber(mapData.bounds.north)
+		local posX = -tileSize - (tileSize * offsetX)-- - 1
+		local posY = tileSize + (tileSize * offsetY)-- - 3
+		tilingMap.grid:SetPoint("TOPLEFT", posX, posY)
+
+		--log:Info(string.format("Zone offset: %.2f, %.2f", offsetX, offsetY))
+		--log:Info(string.format("Zone bounds: %d W <-> %d E, %d S <-> %d N",
+			--mapData.bounds.west, mapData.bounds.east, mapData.bounds.south, mapData.bounds.north)
+		--)
 	end
 	----- PUBLIC END -----
 
@@ -219,6 +317,10 @@ local function PrivateClass()
 	end
 
 	function obj:GetPositionText(worldData)
+		if (worldData == nil) then
+			return "?.??, ?.??"
+		end
+
 		if (IsShiftKeyDown()) then
 			return string.format("%d, %d", worldData.world.x, worldData.world.y)
 		else
@@ -232,6 +334,7 @@ local function PrivateClass()
 			tilingMinimap.tileFrames[i]:Hide()
 		end
 
+		if (worldData == nil) then return end
 		--Calculate frame size based on zoom
 		local zoomOffsets = { 0.0, 0.175, 0.4, 0.75, 1.3, 2.5 }
 		local zoomIndex = Minimap:GetZoom() + 1
@@ -242,22 +345,26 @@ local function PrivateClass()
 		local tiling = _G.LEDII_TILE_TILING
 		local frameIndex = 1
 		local tileParent = tilingMinimap.container
-		local extent = 2
+		local extent = 1
+		local drawDirectionX = -1
+		local drawDirectionY = 1
+
 		for offsetY = -extent, extent do
 			for offsetX = -extent, extent do
 				--Evaluate data for tile
 				local tileX = worldData.tile.x + offsetX
 				local tileY = worldData.tile.y + offsetY
-				local tileKey = string.format("%d_%d", utils:TruncateNumber(tileX), utils:TruncateNumber(tileY))
+				local tileKey = tiling:GetTileKey(tileX, tileY)
 				local isPlayerTile = (offsetX == 0 and offsetY == 0)
 				local isUnlocked = tiling:IsTileUnlocked(tileKey, worldData.zoneId, worldData.continentId)
-				
-				local framePosX = obj:GetTileMinimapOffset(tileX, offsetX, worldData.tileId.x, frameSize)
-				local framePosY = obj:GetTileMinimapOffset(tileY, offsetY, worldData.tileId.y, -frameSize)
+
+				local framePosX = obj:GetTileMinimapOffset(worldData.tile.x, worldData.tileId.x, offsetX, frameSize, drawDirectionX)
+				local framePosY = obj:GetTileMinimapOffset(worldData.tile.y, worldData.tileId.y, offsetY, -frameSize, drawDirectionY)
 
 				--Draw tile
 				if (isPlayerTile or isUnlocked) then
 					--Initialize tile
+					--log:Info(string.format("Draw tile: %.2f, %.2f (offset %d, %d | key %s)", tileX, tileY, offsetX, offsetY, tileKey))
 					local tileFrame = tilingMinimap.tileFrames[frameIndex]
 					if (tileFrame == nil) then
 						local name = "TileZ_Section_" .. frameIndex
@@ -289,15 +396,13 @@ local function PrivateClass()
 		end
 	end
 
-	function obj:GetTileMinimapOffset(frameTile, offset, playerTile, tileSize)
-		local dx = frameTile - playerTile - 0.5
-		if (frameTile < 0) then
-			local negTile = frameTile - (offset * 2)
-			dx = negTile - playerTile + 0.5
-		end
-		local offsetX = dx * tileSize
+	function obj:GetTileMinimapOffset(tile, tileId, offset, tileSize, direction)
+		local relOffset = offset + (utils:Turnary(tile >= 0, -0.5, 0.5) * direction)
+		local relTile = tile + (relOffset * direction)
+		local playerDelta = (relTile - tileId)
+		local centerOffset = playerDelta * tileSize
 
-		return offsetX, 0
+		return centerOffset
 	end
 
 	function obj:OnSettingsButtonClicked()
@@ -325,8 +430,8 @@ local function PrivateClass()
 		--log:Info("OnTileSizeSelected: " .. index)
 
 		local tiling = _G.LEDII_TILE_TILING
-		local values = { 25, 50, 100 }
-		tiling.tileSize = values[index]
+		tiling.tileSize = tileSizeOptions[index]
+		tiling:Save()
 
 		for i = 1, 5 do
 			MinimapZoomIn:Click()
@@ -337,16 +442,16 @@ local function PrivateClass()
 		--log:Info("OnStartTilesSelected: " .. index)
 
 		local tiling = _G.LEDII_TILE_TILING
-		local values = { 1.0, 2.0, 3.0 }
-		tiling.startCount = values[index]
+		tiling.startCount = startTilesOptions[index]
+		tiling:Save()
 	end
 
 	function obj:OnXPRateSelected(index)
 		--log:Info("OnXPRateSelected: " .. index)
 
 		local tiling = _G.LEDII_TILE_TILING
-		local values = { 1.0, 2.0, 3.0 }
-		tiling.xpRate = values[index]
+		tiling.xpRate = xpRateOptions[index]
+		tiling:Save()
 	end
 	----- PRIVATE END -----
 
@@ -382,16 +487,8 @@ local function PrivateClass()
 		frame.texture = frame:CreateTexture(nil, "ARTWORK")
 		frame.texture:SetTexture(file, "REPEAT", "REPEAT")
 		frame.texture:SetAllPoints(frame)
-		frame.texture:SetHorizTile(tileY or false)
-		frame.texture:SetVertTile(tileX or false)
-
-		-- Repeat across dimensions based on tile size
-		if (tileSize ~= nil) then
-			frame.texture:SetTexCoord(
-				0, frame:GetWidth() / tileSize,
-				0, frame:GetHeight() / tileSize
-			)
-		end
+		frame.texture:SetHorizTile(tileX or false)
+		frame.texture:SetVertTile(tileY or false)
 
 		return frame
 	end
@@ -496,10 +593,10 @@ local function PrivateClass()
 		return xpBar
 	end
 
-	function obj:CreateSelectorFrame(name, parent, label, options, callback)
+	function obj:CreateSelectorFrame(name, parent, label, options, selectedOption, callback)
 		local selector = obj:CreateContainerFrame(name .. "_Container", parent)
 		selector:SetSize(parent:GetWidth(), 30)
-		selector.index = 1
+		selector.index = selectedOption
 
 		local widthInset = 20
 		local nameWidth = (selector:GetWidth() * 0.5) - widthInset
