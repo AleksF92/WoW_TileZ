@@ -10,9 +10,6 @@ local function PrivateClass()
 	----- VARIABLES BEGIN -----
 	local debug = true
 
-	local realOffsetX = 100000
-	local realOffsetY = 100000
-
 	local currentXP = 0
 	local nextXP = 0
 	local availableTiles = 0
@@ -142,8 +139,7 @@ local function PrivateClass()
 
 		local worldY, worldX = UnitPosition("player")
 		local mapX, mapY = C_Map.GetPlayerMapPosition(data.zoneId, "player"):GetXY()
-		data.worldReal = { x = worldX, y = worldY }
-		data.world = { x = data.worldReal.x + realOffsetX, y = data.worldReal.y + realOffsetY }
+		data.world = { x = worldX, y = worldY }
 		data.map = { x = mapX, y = mapY }
 		data.tile = { x = data.world.x / obj.tileSize , y = data.world.y / obj.tileSize }
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
@@ -201,11 +197,6 @@ local function PrivateClass()
 		data.bounds.east = data.bounds.west - est.width					--Positive X
 		data.bounds.north = est.refWorldY + (est.refMapY * est.height)	--Negative Y
 		data.bounds.south = data.bounds.north - est.height				--Positive Y
-
-		data.bounds.west = data.bounds.west + realOffsetX
-		data.bounds.east = data.bounds.east + realOffsetX
-		data.bounds.north = data.bounds.north + realOffsetY
-		data.bounds.south = data.bounds.south + realOffsetY
 
 		return data
 	end

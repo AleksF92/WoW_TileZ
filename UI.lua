@@ -29,6 +29,9 @@ local function PrivateClass()
 	local startTilesOptions = { 1.0, 2.0, 3.0 }
 	local xpRateOptions = { 1.0, 2.0, 3.0 }
 	local refreshMap = false
+
+	local shiftOffsetX = 100000
+	local shiftOffsetY = 100000
 	----- VARIABLES END -----
 
 
@@ -110,7 +113,8 @@ local function PrivateClass()
 		tilingMap.lastZoneId = 0
 		tilingMap.lastHeight = 0
 		tilingMap.lastVisible = false
-		tilingMap.lastTileId = {}
+		tilingMap.lastTileKey = ""
+		tilingMap.lastUnlocked = false
 
 		tilingMap.gridMask = obj:CreateContainerFrame("TileZ_MapGridMask", WorldMapFrame.ScrollContainer)
 		tilingMap.gridMask:SetAllPoints(WorldMapFrame.ScrollContainer)
@@ -238,14 +242,15 @@ local function PrivateClass()
 				(mapData.isVisible ~= tilingMap.lastVisible) or
 				(mapData.height ~= tilingMap.lastHeight) or
 				(mapData.zoneId ~= tilingMap.lastZoneId) or
-				(worldData.tileId.x ~= tilingMap.lastTileId.x) or
-				(worldData.tileId.y ~= tilingMap.lastTileId.y) or
+				(worldData.tileKey ~= tilingMap.lastTileKey) or
+				(worldData.isUnlocked ~= tilingMap.lastUnlocked) or
 				refreshMap
 			) then
 				tilingMap.lastVisible = mapData.isVisible
 				tilingMap.lastHeight = mapData.height
 				tilingMap.lastZoneId = mapData.zoneId
-				tilingMap.lastTileId = worldData.tileId
+				tilingMap.lastTileKey = worldData.tileKey
+				tilingMap.lastUnlocked = worldData.isUnlocked
 				refreshMap = false
 				obj:OnMapChanged(mapData, worldData)
 			end
@@ -281,8 +286,8 @@ local function PrivateClass()
 		local sizeY = mapData.height + (tilePixelSize * 2)
 		tilingMap.grid:SetSize(sizeX, sizeY)
 
-		local tileW = mapData.bounds.west / tiling.tileSize
-		local tileN = mapData.bounds.north / tiling.tileSize
+		local tileW = (mapData.bounds.west + shiftOffsetX) / tiling.tileSize
+		local tileN = (mapData.bounds.north + shiftOffsetY) / tiling.tileSize
 		local relTileW = (tileW - utils:TruncateNumber(tileW)) - 1
 		local relTileN = (tileN - utils:TruncateNumber(tileN)) - 1
 		local offsetW = relTileW * tilePixelSize
@@ -293,9 +298,9 @@ local function PrivateClass()
 		--log:Info(string.format("Zone offset: %.2f, %.2f | %.2f, %.2f | %.2f, %.2f",
 		--tileW, tileN, relTileW, relTileN, offsetW, offsetN))
 
-		log:Info(string.format("Zone boundary: %.2fW | %.2fE | %.2fS | %.2fN",
-		mapData.bounds.west, mapData.bounds.east,
-		mapData.bounds.south, mapData.bounds.north))
+		--log:Info(string.format("Zone boundary: %.2fW | %.2fE | %.2fS | %.2fN",
+		--mapData.bounds.west, mapData.bounds.east,
+		--mapData.bounds.south, mapData.bounds.north))
 
 		--log:Info(string.format("Zone ref: %.2f, %.2f | %.2f, %.2f",
 		--mapData.zoneEstimation.refWorldX, mapData.zoneEstimation.refWorldY,
@@ -418,8 +423,8 @@ local function PrivateClass()
 		if (mapData.zoneEstimation == nil) then return end
 
 		local tiling = _G.LEDII_TILE_TILING
-		local tileW = utils:TruncateNumber(mapData.bounds.west / tiling.tileSize)
-		local tileN = utils:TruncateNumber(mapData.bounds.north / tiling.tileSize)
+		local tileW = utils:TruncateNumber((mapData.bounds.west + shiftOffsetX) / tiling.tileSize)
+		local tileN = utils:TruncateNumber((mapData.bounds.north + shiftOffsetY) / tiling.tileSize)
 		local pixelsPerWorldUnit = mapData.width / mapData.zoneEstimation.width
 		local tilePixelSize = tiling.tileSize * pixelsPerWorldUnit
 
@@ -447,9 +452,15 @@ local function PrivateClass()
 			local keyParts = utils:Split(key, "_")
 			local tileIdX = tonumber(keyParts[1])
 			local tileIdY = tonumber(keyParts[2])
+			local shiftedWorldX = (tileIdX * tiling.tileSize) + shiftOffsetX
+			local shiftedWorldY = (tileIdY * tiling.tileSize) + shiftOffsetY
+			local shiftedTileIdX = (shiftedWorldX / tiling.tileSize) - 1
+			local shiftedTileIdY = (shiftedWorldY / tiling.tileSize) - 1
+			shiftedTileIdX = shiftedTileIdX + utils:Turnary(string.find(tileIdX, "-"), 0, 1)
+			shiftedTileIdY = shiftedTileIdY + utils:Turnary(string.find(tileIdY, "-"), 0, 1)
 
-			local deltaX = -(tileIdX - tileW)
-			local deltaY = tileIdY - tileN
+			local deltaX = -(shiftedTileIdX - tileW)
+			local deltaY = shiftedTileIdY - tileN
 			local framePosX = deltaX * tilePixelSize
 			local framePosY = deltaY * tilePixelSize
 
