@@ -283,12 +283,12 @@ local function PrivateClass()
 
 		local tileW = mapData.bounds.west / tiling.tileSize
 		local tileN = mapData.bounds.north / tiling.tileSize
-		local relTileW = (tileW - utils:TruncateNumber(tileW))
-		local relTileN = (tileN - utils:TruncateNumber(tileN))
+		local relTileW = (tileW - utils:TruncateNumber(tileW)) - 1
+		local relTileN = (tileN - utils:TruncateNumber(tileN)) - 1
 		local offsetW = relTileW * tilePixelSize
-		local offsetN = relTileN * tilePixelSize
-		offsetW = utils:Turnary(offsetW < 0, offsetW, -offsetW)
-		offsetN = utils:Turnary(offsetN < 0, -offsetN, offsetN)
+		local offsetN = -relTileN * tilePixelSize
+		--offsetW = utils:Turnary(offsetW < 0, offsetW, -offsetW)
+		--offsetN = utils:Turnary(offsetN < 0, -offsetN, offsetN)
 
 		--log:Info(string.format("Zone offset: %.2f, %.2f | %.2f, %.2f | %.2f, %.2f",
 		--tileW, tileN, relTileW, relTileN, offsetW, offsetN))
@@ -426,11 +426,17 @@ local function PrivateClass()
 		--Show unlocked tiles
 		local frameIndex = 1
 		local tileParent = tilingMap.grid
-		local unlockedZoneTiles = utils:CloneTableShallow(
-			mapData.unlockedTiles[mapData.continentId][mapData.zoneId]
-		)
-		if (unlockedZoneTiles == nil) then
-			unlockedZoneTiles = {}
+
+		local unlockedZoneTiles = {}
+		local allTiles = mapData.unlockedTiles
+		if (allTiles ~= nil) then
+			local continentTiles = allTiles[mapData.continentId]
+			if (continentTiles ~= nil) then
+				local zoneTiles = continentTiles[mapData.zoneId]
+				if (zoneTiles ~= nil) then
+					unlockedZoneTiles = utils:CloneTableShallow(zoneTiles)
+				end
+			end
 		end
 
 		if (mapData.zoneId == worldData.zoneId) then
@@ -442,9 +448,9 @@ local function PrivateClass()
 			local tileIdX = tonumber(keyParts[1])
 			local tileIdY = tonumber(keyParts[2])
 
-			local deltaX = tileIdX - tileW
+			local deltaX = -(tileIdX - tileW)
 			local deltaY = tileIdY - tileN
-			local framePosX = -deltaX * tilePixelSize
+			local framePosX = deltaX * tilePixelSize
 			local framePosY = deltaY * tilePixelSize
 
 			local isPlayerTile = (key == worldData.tileKey)
@@ -464,6 +470,10 @@ local function PrivateClass()
 			tileFrame:SetSize(tilePixelSize, tilePixelSize)
 			tileFrame:SetPoint("TOPLEFT", tileParent, "TOPLEFT", framePosX, framePosY)
 			tileFrame:Show()
+
+			log:Info(string.format("Draw tile: %.2f, %.2f | %.2f, %.2f",
+				tileIdX, tileIdY, deltaX, deltaY
+			))
 
 			local strata = utils:Turnary(isPlayerTile, "TOOLTIP", "MEDIUM")
 			tileFrame:SetFrameStrata(strata)

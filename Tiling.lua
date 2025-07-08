@@ -10,6 +10,9 @@ local function PrivateClass()
 	----- VARIABLES BEGIN -----
 	local debug = true
 
+	local realOffsetX = 100000
+	local realOffsetY = 100000
+
 	local currentXP = 0
 	local nextXP = 0
 	local availableTiles = 0
@@ -24,7 +27,7 @@ local function PrivateClass()
 	local measureDistance = 0
 
 	obj.autoUnlock = false
-	obj.tileSize = 25
+	obj.tileSize = 50
 	obj.startCount = 3
 	obj.xpRate = 1.0
 
@@ -55,7 +58,7 @@ local function PrivateClass()
 		totalTiles = LediiData_TileZ_Character.totalTiles or 0
 		unlockedTiles = LediiData_TileZ_Character.unlockedTiles or {}
 
-		obj.tileSize = LediiData_TileZ_Character.tileSize or 25
+		obj.tileSize = LediiData_TileZ_Character.tileSize or 50
 		obj.startCount = LediiData_TileZ_Character.startCount or 3
 		obj.xpRate = LediiData_TileZ_Character.startCount or 1.0
 
@@ -139,9 +142,10 @@ local function PrivateClass()
 
 		local worldY, worldX = UnitPosition("player")
 		local mapX, mapY = C_Map.GetPlayerMapPosition(data.zoneId, "player"):GetXY()
-		data.world = { x = worldX, y = worldY }
+		data.worldReal = { x = worldX, y = worldY }
+		data.world = { x = data.worldReal.x + realOffsetX, y = data.worldReal.y + realOffsetY }
 		data.map = { x = mapX, y = mapY }
-		data.tile = { x = worldX / obj.tileSize , y = worldY / obj.tileSize }
+		data.tile = { x = data.world.x / obj.tileSize , y = data.world.y / obj.tileSize }
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
 		data.tileSize = obj.tileSize
 		data.tileKey = obj:GetTileKey(data.tile.x, data.tile.y)
@@ -197,6 +201,11 @@ local function PrivateClass()
 		data.bounds.east = data.bounds.west - est.width					--Positive X
 		data.bounds.north = est.refWorldY + (est.refMapY * est.height)	--Negative Y
 		data.bounds.south = data.bounds.north - est.height				--Positive Y
+
+		data.bounds.west = data.bounds.west + realOffsetX
+		data.bounds.east = data.bounds.east + realOffsetX
+		data.bounds.north = data.bounds.north + realOffsetY
+		data.bounds.south = data.bounds.south + realOffsetY
 
 		return data
 	end
