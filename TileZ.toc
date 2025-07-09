@@ -1,4 +1,4 @@
-## Interface: 11404
+## Interface: 11507
 ## Title: TileZ
 ## Version: 1.0.0
 ## Author: Aleksander Fimreite
