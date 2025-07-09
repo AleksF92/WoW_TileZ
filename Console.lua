@@ -19,10 +19,7 @@ local function PrivateClass()
 		log:Info(obj:Highlight(cmd .. " add {amount}", " - Manually add tiles"))
 		log:Info(obj:Highlight(cmd .. " remove {amount}", " - Manually remove tiles"))
 		log:Info(obj:Highlight(cmd .. " reset", " - Resets all data for character"))
-		log:Info(obj:Highlight(cmd .. " status", " - Logs status for tiles"))
-		log:Info(obj:Highlight(cmd .. " position", " - Logs tile number for current position"))
-		log:Info(obj:Highlight(cmd .. " estimate {x} {y}", " - Calculates required tiles to reach destination"))
-		log:Info(obj:Highlight(cmd .. " measure", " - Measures the distance for the zone"))
+		--log:Info(obj:Highlight(cmd .. " measure", " - Measures the distance for the zone"))
 	end
 
 	function obj:Alias()
@@ -34,40 +31,19 @@ local function PrivateClass()
 	end
 
 	function obj:Add(args)
-		local count = args[2]
-		log:Info("Adding " .. count .. " tiles")
+		local count = math.abs(args[2])
+		tiling:SetManualTiles(count)
 	end
 
 	function obj:Remove(args)
-		local count = args[2]
-		log:Info("Removing " .. count .. " tiles")
+		local count = math.abs(args[2])
+		tiling:SetManualTiles(-count)
 	end
 
 	function obj:Reset(args)
 		log:Info("Reset all tiles...")
 		tiling:Reset()
 		tiling:CalculateHistoricXP()
-	end
-
-	function obj:Status(args)
-		local available = 0
-		local total = 0
-		local currentXP = 0
-		local nextXp = 0
-		log:Info("Available tiles: " .. available .. "\nTotal tiles: " .. total .. "\nNext tile: " .. currentXP .. " / " .. nextXp .. " XP")
-	end
-
-	function obj:Position(args)
-		local zone = GetZoneText()
-		local tile = tiling:GetCurrentTile()
-		log:Info("Current tile is " .. tile.x .. ", " .. tile.y .. " (" .. zone .. ")")
-	end
-
-	function obj:Estimate(args)
-		local x = args[2]
-		local y = args[3]
-		local zone = GetZoneText()
-		log:Info("Estimate to tile " .. x .. ", " .. y .. " (" .. zone .. ")")
 	end
 
 	function obj:Measure(args)
@@ -102,16 +78,8 @@ function SlashCmdList.LEDII_TILE(msg, editbox)
 		class:Remove(args)
 	elseif (args[1] == "reset") then
 		class:Reset(args)
-	elseif (args[1] == "status") then
-		class:Status(args)
-	elseif (args[1] == "position") then
-		class:Position(args)
-	elseif (args[1] == "pos") then
-		class:Position(args)
-	elseif (args[1] == "estimate") then
-		class:Estimate(args)
-	elseif (args[1] == "measure") then
-		class:Measure(args)
+	--elseif (args[1] == "measure") then
+		--class:Measure(args)
 	else
 		class:Help()
 	end

@@ -7,21 +7,23 @@ local function PrivateClass()
 	local obj = {}
 
 	----- VARIABLES BEGIN -----
-	local debug = true
+	local debug = false
 
 	local tilingStatus = {}
 	local tilingMinimap = {}
 	local tilingMap = {}
 	local tilingSettings = {}
 	local tilingBlocker = {}
+	local tilingTaxi = {}
 
 	local whiteTexture = "Interface\\Buttons\\WHITE8x8"
 	local minimapMaskTexture = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 	local minimapTileTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
 	local mapGridTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
 	local settingsTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Cogwheel"
-	local unlockEnabledTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Open"
-	local unlockDisabledTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Closed"
+	local lockedModeTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Closed"
+	local unlockedModeTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Open"
+	local transportModeTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Eye"
 	local buttonFrameTexture = "Interface\\Buttons\\UI-Panel-Button-Down"
 	local screenCoverTexture = "Interface\\Addons\\TileZ\\Textures\\Screen_Cover"
 
@@ -79,12 +81,12 @@ local function PrivateClass()
 			tilingStatus.measureLabel:Show()
 		end
 
-		tilingStatus.settingsButton = obj:CreateButtonFrame("TileZ_SettingsButton", tilingStatus.container, settingsTexture, 10)
+		tilingStatus.settingsButton = obj:CreateButtonFrame("TileZ_SettingsButton", tilingStatus.container, false, settingsTexture, 10)
 		tilingStatus.settingsButton:SetPoint("RIGHT", tilingStatus.container, "LEFT", 0, 0)
 		tilingStatus.settingsButton:SetSize(40, 40)
 		tilingStatus.settingsButton:SetScript("OnClick", obj.OnSettingsButtonClicked)
 
-		tilingStatus.unlockButton = obj:CreateButtonFrame("TileZ_UnlockButton", tilingStatus.container, unlockDisabledTexture, 10)
+		tilingStatus.unlockButton = obj:CreateButtonFrame("TileZ_UnlockButton", tilingStatus.container, true, lockedModeTexture, 10)
 		tilingStatus.unlockButton:SetPoint("LEFT", tilingStatus.container, "RIGHT", 0, 0)
 		tilingStatus.unlockButton:SetSize(40, 40)
 		tilingStatus.unlockButton.frame:SetBackdropColor(1, 0, 0, 0.5)
@@ -143,38 +145,44 @@ local function PrivateClass()
 
 		tilingSettings.container = obj:CreateBackdropFrame("Tilez_StatusContainer", tilingStatus.container)
 		tilingSettings.container:SetPoint("TOP", tilingStatus.container, "BOTTOM", 0, 0)
-		tilingSettings.container:SetSize(400, 250)
+		tilingSettings.container:SetSize(400, 170)
 		tilingSettings.container:Hide()
 
 		tilingSettings.tileSizeSelector = obj:CreateSelectorFrame(
 			"Tilez_TileSizeSelector", tilingSettings.container,
 			"Tile Size", { "50 yards", "100 yards", "150 yards", "200 yards" },
-			utils:IndexOf(tileSizeOptions, tiling.tileSize), obj.OnTileSizeSelected
+			tileSizeOptions,tiling.tileSize, obj.OnTileSizeSelected
 		)
 		tilingSettings.tileSizeSelector:SetPoint("TOP", tilingSettings.container, "TOP", 0, -10)
 
 		tilingSettings.startTilesSelector = obj:CreateSelectorFrame(
 			"Tilez_StartTilesSelector", tilingSettings.container,
 			"Start Tiles", { "1x", "2x", "3x" },
-			utils:IndexOf(startTilesOptions, tiling.startCount), obj.OnStartTilesSelected
+			startTilesOptions, tiling.startCount, obj.OnStartTilesSelected
 		)
 		tilingSettings.startTilesSelector:SetPoint("TOP", tilingSettings.tileSizeSelector, "BOTTOM", 0, 0)
 
 		tilingSettings.xpRateSelector = obj:CreateSelectorFrame(
 			"Tilez_XPRateSelector", tilingSettings.container,
 			"XP Rate", { "1x", "2x", "3x" },
-			utils:IndexOf(xpRateOptions, tiling.xpRate), obj.OnXPRateSelected
+			xpRateOptions, tiling.xpRate, obj.OnXPRateSelected
 		)
 		tilingSettings.xpRateSelector:SetPoint("TOP", tilingSettings.startTilesSelector, "BOTTOM", 0, 0)
 
 		tilingSettings.authorLabel = obj:CreateLabelFrame("TileZ_AuthorLabel", tilingSettings.container)
-		tilingSettings.authorLabel:SetPoint("BOTTOM", tilingSettings.container, "BOTTOM", 0, 14)
+		tilingSettings.authorLabel:SetPoint("BOTTOMRIGHT", tilingSettings.container, "BOTTOMRIGHT", -20, 14)
 		tilingSettings.authorLabel:SetText("TileZ by Ledii")
 		tilingSettings.authorLabel:SetTextColor(0.6, 0.6, 0.6, 1)
+
+		tilingSettings.hintLabel = obj:CreateLabelFrame("TileZ_HintLabel", tilingSettings.container)
+		tilingSettings.hintLabel:SetPoint("BOTTOMLEFT", tilingSettings.container, "BOTTOMLEFT", 20, 14)
+		tilingSettings.hintLabel:SetText("Left Click: Toggle unlock\n\nRight Click: Toggle visibility")
+		tilingSettings.hintLabel:SetTextColor(1, 1, 1, 1)
+		tilingSettings.hintLabel:SetJustifyH("LEFT")
 	end
 
 	function obj:SetupTilingBlocker()
-		tilingBlocker.isUnlocked = true
+		tilingBlocker.isShowingScreen = true
 
 		tilingBlocker.container = obj:CreateContainerFrame("TileZ_BlockerContainer", UIParent)
 		tilingBlocker.container:SetAllPoints(UIParent)
@@ -219,12 +227,25 @@ local function PrivateClass()
 			return
 		end
 
+		if (worldData.isTransport) then
+			tilingStatus.unlockButton.icon:SetTexture(transportModeTexture, "REPEAT", "REPEAT")
+			tilingStatus.unlockButton.frame:SetBackdropColor(0, 1, 1, 0.5)
+		end
+
+		--Update buttons
+		obj:SetSelectorEnabled(tilingSettings.tileSizeSelector, worldData.allowSetup)
+		obj:SetSelectorEnabled(tilingSettings.startTilesSelector, worldData.allowSetup)
+		obj:SetSelectorEnabled(tilingSettings.xpRateSelector, worldData.allowSetup)
+
 		--Show blocker for current tile if nessesary
-		if (tilingBlocker.isUnlocked ~= worldData.isUnlocked and worldData.isNewZone ~= nil and not worldData.isNewZone == true) then
-			tilingBlocker.isUnlocked = worldData.isUnlocked
+		local shouldShowScreen = worldData.isUnlocked or worldData.isTransport
+		local newScreenState = (tilingBlocker.isShowingScreen ~= shouldShowScreen)
+		local newZoneState = (worldData.isNewZone ~= nil and not worldData.isNewZone == true)
+		if (newScreenState and newZoneState) then
+			tilingBlocker.isShowingScreen = shouldShowScreen
 
 			if (not debug) then
-				if (tilingBlocker.isUnlocked) then
+				if (tilingBlocker.isShowingScreen) then
 					UIFrameFadeOut(tilingBlocker.container, 0.25, 1, 0)
 				else
 					UIFrameFadeIn(tilingBlocker.container, 0.25, 0, 1)
@@ -272,7 +293,7 @@ local function PrivateClass()
 			--log:Info("Zone estimation valid. Calculating tiles...")
 		else
 			tilingMap.grid:Hide()
-			log:Info("Zone estimation missing! (" .. mapData.zoneName .. " | " .. mapData.zoneId .. ")")
+			--log:Info("Zone estimation missing! (" .. mapData.zoneName .. " | " .. mapData.zoneId .. ")")
 			obj:UpdateMapTiles(mapData, worldData)
 			return
 		end
@@ -370,13 +391,10 @@ local function PrivateClass()
 
 		if (worldData == nil) then return end
 		--Calculate frame size based on zoom
-		local zoomOffsets = { 0.0, 0.175, 0.4, 0.75, 1.3, 2.5 }
-		local zoomIndex = Minimap:GetZoom() + 1
-		local zoomMultiplier = 1.0 + zoomOffsets[zoomIndex]
-		local frameSize = worldData.tileSize * 0.25 * zoomMultiplier
+		local tiling = _G.LEDII_TILE_TILING
+		local frameSize = worldData.tileSize * obj:GetZoomMultiplier(worldData.zoneId, tiling.isIndoor)
 
 		--Show surrounding tiles
-		local tiling = _G.LEDII_TILE_TILING
 		local frameIndex = 1
 		local tileParent = tilingMinimap.container
 		local extent = 2
@@ -521,6 +539,50 @@ local function PrivateClass()
 		return centerOffset
 	end
 
+	function obj:GetZoomMultiplier(zoneId, isIndoor)
+		local zoomOffsets = { 0.0, 0.175, 0.4, 0.75, 1.3, 2.5 }
+
+		local cityIds = {
+			1453, --Stormwind
+			1455, --Ironforge
+			1457, --Darnassus
+		}
+
+		if (utils:TableContains(cityIds, zoneId) and isIndoor) then --Stormwind
+			zoomOffsets = { 0.5, 1.0, 1.6, 2.75, 5, 9 }
+		end
+
+		local zoomIndex = Minimap:GetZoom() + 1
+		local zoomMultiplier = 1.0 + zoomOffsets[zoomIndex]
+		return 0.3 * zoomMultiplier
+	end
+
+	function obj:SetSelectorEnabled(selector, enabled)
+		if (enabled) then
+			selector.previous:Enable()
+			selector.next:Enable()
+			selector.previous.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
+			selector.next.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
+		else
+			selector.previous:Disable()
+			selector.next:Disable()
+			selector.previous.frame:SetBackdropColor(0.3, 0.3, 0.3, 0.5)
+			selector.next.frame:SetBackdropColor(0.3, 0.3, 0.3, 0.5)
+		end
+	end
+
+	function obj:SetSelectorValue(selector, value)
+		selector.index = utils:IndexOf(selector.optionValues, value)
+		selector.valueLabel:SetText(selector.optionTexts[selector.index])
+	end
+
+	function obj:UpdateSettings()
+		local tiling = _G.LEDII_TILE_TILING
+		obj:SetSelectorValue(tilingSettings.tileSizeSelector, tiling.tileSize)
+		obj:SetSelectorValue(tilingSettings.startTilesSelector, tiling.startCount)
+		obj:SetSelectorValue(tilingSettings.xpRateSelector, tiling.xpRate)
+	end
+
 	function obj:OnSettingsButtonClicked()
 		if (tilingSettings.container:IsShown()) then
 			tilingSettings.container:Hide()
@@ -529,15 +591,37 @@ local function PrivateClass()
 		end
 	end
 
-	function obj:OnUnlockButtonClicked()
+	function obj:OnUnlockButtonClicked(button, custom)
 		local tiling = _G.LEDII_TILE_TILING
-		tiling.autoUnlock = not tiling.autoUnlock
+		if (not custom) then return end
 
-		if (tiling.autoUnlock) then
-			tilingStatus.unlockButton.icon:SetTexture(unlockEnabledTexture, "REPEAT", "REPEAT")
+		if (button == "LeftButton") then
+			if (tiling.lockMode ~= "Unlocked") then
+				tiling.lockMode = "Unlocked"
+			else
+				tiling.lockMode = "Locked"
+			end
+		elseif (button == "RightButton") then
+			if (tiling.lockMode ~= "Transport") then
+				tiling.lockMode = "Transport"
+			else
+				tiling.lockMode = "Locked"
+			end
+		end
+
+		obj:SetupUnlockButtonStatus()
+	end
+
+	function obj:SetupUnlockButtonStatus()
+		local tiling = _G.LEDII_TILE_TILING
+		if (tiling.lockMode == "Unlocked") then
+			tilingStatus.unlockButton.icon:SetTexture(unlockedModeTexture, "REPEAT", "REPEAT")
 			tilingStatus.unlockButton.frame:SetBackdropColor(0, 1, 0, 0.5)
+		elseif (tiling.lockMode == "Transport") then
+			tilingStatus.unlockButton.icon:SetTexture(transportModeTexture, "REPEAT", "REPEAT")
+			tilingStatus.unlockButton.frame:SetBackdropColor(0, 1, 1, 0.5)
 		else
-			tilingStatus.unlockButton.icon:SetTexture(unlockDisabledTexture, "REPEAT", "REPEAT")
+			tilingStatus.unlockButton.icon:SetTexture(lockedModeTexture, "REPEAT", "REPEAT")
 			tilingStatus.unlockButton.frame:SetBackdropColor(1, 0, 0, 0.5)
 		end
 	end
@@ -559,8 +643,7 @@ local function PrivateClass()
 		--log:Info("OnStartTilesSelected: " .. index)
 
 		local tiling = _G.LEDII_TILE_TILING
-		tiling.startCount = startTilesOptions[index]
-		tiling:Save()
+		tiling:SetStartTiles(startTilesOptions[index])
 	end
 
 	function obj:OnXPRateSelected(index)
@@ -610,7 +693,7 @@ local function PrivateClass()
 		return frame
 	end
 
-	function obj:CreateButtonFrame(name, parent, iconFile, insets)
+	function obj:CreateButtonFrame(name, parent, enableRightClick, iconFile, insets)
 		local button = CreateFrame("Button", name, parent)
 
 		button:SetNormalFontObject("GameFontNormalLarge")
@@ -641,9 +724,14 @@ local function PrivateClass()
 				self.icon:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -insets, insets - 2)
 			end)
 
-			button:SetScript("OnMouseUp", function(self)
+			button:SetScript("OnMouseUp", function(self, btn)
 				self.icon:SetPoint("TOPLEFT", self, "TOPLEFT", insets, -insets)
 				self.icon:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -insets, insets)
+
+				local clickFunc = self:GetScript("OnClick")
+				if (clickFunc and enableRightClick) then
+					clickFunc(self, btn, true)
+				end
 			end)
 		end
 
@@ -710,10 +798,12 @@ local function PrivateClass()
 		return xpBar
 	end
 
-	function obj:CreateSelectorFrame(name, parent, label, options, selectedOption, callback)
+	function obj:CreateSelectorFrame(name, parent, label, optionTexts, optionValues, selectedValue, callback)
 		local selector = obj:CreateContainerFrame(name .. "_Container", parent)
 		selector:SetSize(parent:GetWidth(), 30)
-		selector.index = selectedOption
+		selector.index = utils:IndexOf(optionValues, selectedValue)
+		selector.optionValues = optionValues
+		selector.optionTexts = optionTexts
 
 		local widthInset = 20
 		local nameWidth = (selector:GetWidth() * 0.5) - widthInset
@@ -731,9 +821,9 @@ local function PrivateClass()
 		selector.valueLabel:SetPoint("RIGHT", selector, "RIGHT", -20, 0)
 		selector.valueLabel:SetSize(valueWidth, selector:GetHeight())
 
-		if (options ~= nil) then
-			local option = options[selector.index]
-			if (option ~= nil) then
+		if (optionTexts ~= nil) then
+			local option = selector.optionTexts[selector.index]
+			if (optionTexts ~= nil) then
 				selector.valueLabel:SetText(option)
 			end
 		end
@@ -744,8 +834,9 @@ local function PrivateClass()
 		selector.previous:SetSize(buttonSize, buttonSize)
 		selector.previous.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
 		selector.previous:SetScript("OnClick", function()
-			selector.index = ((selector.index - 1 - 1 + #options) % #options) + 1
-			selector.valueLabel:SetText(options[selector.index])
+			selector.index = ((selector.index - 1 - 1 + #selector.optionTexts) % #selector.optionTexts) + 1
+			local option = selector.optionTexts[selector.index]
+			selector.valueLabel:SetText(option)
 			if (callback ~= nil) then
 				callback(nil, selector.index)
 			end
@@ -757,8 +848,9 @@ local function PrivateClass()
 		selector.next:SetSize(buttonSize, buttonSize)
 		selector.next.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
 		selector.next:SetScript("OnClick", function()
-			selector.index = ((selector.index - 1 + 1 + #options) % #options) + 1
-			selector.valueLabel:SetText(options[selector.index])
+			selector.index = ((selector.index - 1 + 1 + #selector.optionTexts) % #selector.optionTexts) + 1
+			local option = selector.optionTexts[selector.index]
+			selector.valueLabel:SetText(option)
 			if (callback ~= nil) then
 				callback(nil, selector.index)
 			end

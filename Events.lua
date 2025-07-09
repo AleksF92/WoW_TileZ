@@ -27,6 +27,10 @@ local function PrivateClass()
 		tiling:OnExperienceChanged(source, xp)
 	end
 
+	function obj:OnZoneChanged(indoors)
+		tiling:OnZoneChanged(indoors)
+	end
+
 	return obj
 end
 
@@ -49,12 +53,10 @@ local function OnEvent(self, event, ...)
 	elseif (event == "QUEST_TURNED_IN") then
 		local id, xp = ...
 		class:OnExperienceChanged("QUEST", xp)
-	elseif (event == "UNIT_SPELLCAST_SUCCEEDED") then
-		--local caster, guid, id = ...
-		--local name = GetSpellInfo(id)
-		--if (caster ~= "player") then return end
-		--log:Info("Spell: " .. name .. " by " .. caster)
-		--class:OnExperienceChanged("SPELL", 0)
+	elseif (event == "ZONE_CHANGED") then
+		class:OnZoneChanged(false)
+	elseif (event == "ZONE_CHANGED_INDOORS") then
+		class:OnZoneChanged(true)
 	end
 end
 
@@ -64,5 +66,6 @@ frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN")
 frame:RegisterEvent("CHAT_MSG_SYSTEM")
 frame:RegisterEvent("QUEST_TURNED_IN")
-frame:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+frame:RegisterEvent("ZONE_CHANGED")
+frame:RegisterEvent("ZONE_CHANGED_INDOORS")
 frame:SetScript("OnEvent", OnEvent)

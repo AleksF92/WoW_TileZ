@@ -8,7 +8,7 @@ local function PrivateClass()
 	local obj = {}
 
 	----- VARIABLES BEGIN -----
-	local debug = true
+	local debug = false
 
 	local currentXP = 0
 	local nextXP = 0
@@ -23,7 +23,7 @@ local function PrivateClass()
 	local measureHistory = {}
 	local measureDistance = 0
 
-	obj.autoUnlock = false
+	obj.lockMode = "Locked"
 	obj.tileSize = 50
 	obj.startCount = 3
 	obj.xpRate = 1.0
@@ -37,6 +37,8 @@ local function PrivateClass()
 	obj.textures.minimap = "Outline"
 	obj.textures.map = "Outline"
 
+	obj.isIndoor = false
+
 	obj.renderDistance = 3
 
 	----- VARIABLES END -----
@@ -49,15 +51,15 @@ local function PrivateClass()
 		LediiData_TileZ = LediiData_TileZ or {}
 		LediiData_TileZ_Character = LediiData_TileZ_Character or {}
 
-		--Try fetch data
-		currentXP = LediiData_TileZ_Character.currentXP or 0
-		availableTiles = LediiData_TileZ_Character.availableTiles or 0
-		totalTiles = LediiData_TileZ_Character.totalTiles or 0
-		unlockedTiles = LediiData_TileZ_Character.unlockedTiles or {}
-
 		obj.tileSize = LediiData_TileZ_Character.tileSize or 50
 		obj.startCount = LediiData_TileZ_Character.startCount or 3
-		obj.xpRate = LediiData_TileZ_Character.startCount or 1.0
+		obj.xpRate = LediiData_TileZ_Character.xpRate or 1.0
+
+		--Try fetch data
+		currentXP = LediiData_TileZ_Character.currentXP or 0
+		availableTiles = LediiData_TileZ_Character.availableTiles or obj.startCount
+		totalTiles = LediiData_TileZ_Character.totalTiles or 0
+		unlockedTiles = LediiData_TileZ_Character.unlockedTiles or {}
 
 		obj.colors = LediiData_TileZ_Character.colors or {}
 		obj.colors.currentUnlocked = obj.colors.currentUnlocked or { r = 0.0, g = 1.0, b = 0.0, a = 1.0 }
@@ -69,6 +71,7 @@ local function PrivateClass()
 		obj.textures.map = obj.textures.map or "Outline"
 
 		obj.renderDistance = LediiData_TileZ_Character.renderDistance or 3
+		obj.isIndoor = LediiData_TileZ_Character.isIndoor or false
 	end
 
 	function obj:Save()
@@ -82,22 +85,30 @@ local function PrivateClass()
 
 		LediiData_TileZ_Character.tileSize = obj.tileSize
 		LediiData_TileZ_Character.startCount = obj.startCount
-		LediiData_TileZ_Character.startCount = obj.xpRate
+		LediiData_TileZ_Character.xpRate = obj.xpRate
 
 		LediiData_TileZ_Character.colors = obj.colors
 		LediiData_TileZ_Character.textures = obj.textures
 
 		LediiData_TileZ_Character.renderDistance = obj.renderDistance
+		LediiData_TileZ_Character.isIndoor = obj.isIndoor
 	end
 
 	function obj:Reset()
 		LediiData_TileZ = nil
 		LediiData_TileZ_Character = nil
 
+		local tempStartCount = obj.startCount
+		local tempXpRate = obj.xpRate
 		obj:Load()
+		obj.startCount = tempStartCount
+		obj.xpRate = tempXpRate
+		availableTiles = obj.startCount
+
 		nextXP = obj:CalculateNextXP(1)
 
 		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+		ui:UpdateSettings()
 	end
 	----- SETUP END -----
 
@@ -145,6 +156,8 @@ local function PrivateClass()
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
 		data.tileSize = obj.tileSize
 		data.tileKey = obj:GetTileKey(data.tile.x, data.tile.y)
+		data.isTransport = obj.lockMode == "Transport"
+		data.allowSetup = totalTiles <= 0
 
 		if (worldData == nil) then return data end
 
@@ -284,7 +297,8 @@ local function PrivateClass()
 		local isZoneBorderException = unlockData.isNewZone and unlockData.isUnlocked
 		local canUnlock = availableTiles > 0 or isZoneBorderException or debug
 
-		if (not obj.autoUnlock and not isZoneBorderException) then return end
+		if (obj.lockMode ~= "Unlocked" and not isZoneBorderException) then return end
+		if (unlockData.isTransport) then return end
 		if (not canUnlock) then return end
 		if (obj:IsTileUnlocked(tileKey, zoneId, continentId)) then return end
 
@@ -334,17 +348,26 @@ local function PrivateClass()
 		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
 	end
 
+	function obj:OnZoneChanged(indoors)
+		if (indoors == obj.isIndoor) then return end
+
+		obj.isIndoor = indoors
+		obj:Save()
+		log:Info("OnZoneChanged: " .. tostring(indoors))
+	end
+
 	function obj:OnExperienceChanged(source, xp, historicLevel)
-		log:Info("Experience changed: +" .. xp .. " from " .. source)
-		currentXP = currentXP + xp
+		--log:Info("Experience changed: +" .. xp .. " from " .. source)
+		local xpGain = xp * obj.xpRate
+		currentXP = currentXP + xpGain
 
 		while (currentXP >= nextXP) do
-			log:Info(currentXP .. " > " .. nextXP)
+			--log:Info(currentXP .. " > " .. nextXP)
 			availableTiles = availableTiles + 1
 			--totalTiles = totalTiles + 1
 			currentXP = currentXP - nextXP
 			nextXP = obj:CalculateNextXP(historicLevel)
-			log:Info("+1 Tile Unlocked")
+			--log:Info("+1 Tile Unlocked")
 		end
 
 		if (historicLevel == nil) then
@@ -354,6 +377,11 @@ local function PrivateClass()
 	end
 
 	function obj:OnTick()
+		if (UnitOnTaxi("player") and obj.lockMode ~= "Transport") then
+			obj.lockMode = "Transport"
+			ui:SetupUnlockButtonStatus()
+		end
+
 		worldData = obj:GetWorldPositionData()
 		mapData = obj:GetMapPositionData()
 
@@ -398,6 +426,32 @@ local function PrivateClass()
 
 			LediiData_TileZ.estimatedArea = refData
 		end
+	end
+
+	function obj:SetStartTiles(value)
+		availableTiles = availableTiles - obj.startCount
+		obj.startCount = value
+		availableTiles = availableTiles + obj.startCount
+
+		obj:Save()
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+	end
+
+	function obj:SetManualTiles(delta)
+		if (delta < 0) then
+			if (math.abs(delta) <= availableTiles) then
+				log:Info("Removed " .. count .. " tiles")
+				availableTiles = availableTiles - delta
+			else 
+				log:Info("Not enough available tiles to remove")
+			end
+		elseif (delta > 0) then
+			log:Info("Added " .. count .. " tiles")
+			availableTiles = availableTiles + delta
+		end
+		
+		obj:Save()
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
 	end
 	----- EVENTS END -----
 
