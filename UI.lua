@@ -106,6 +106,12 @@ local function PrivateClass()
 		tilingMinimap.container.mask:SetAllPoints(tilingMinimap.container)
 		tilingMinimap.container.texture:AddMaskTexture(tilingMinimap.container.mask)
 
+		tilingMinimap.player = obj:CreateTextureFrame("TileZ_PlayerDot", tilingMinimap.container, whiteTexture)
+		tilingMinimap.player:SetSize(2, 2)
+		tilingMinimap.player.texture:SetVertexColor(0, 0, 0, 1)
+		tilingMinimap.player:SetPoint("CENTER", 0, 0)
+		tilingMinimap.player:SetFrameStrata("DIALOG")
+
 		tilingMinimap.tileFrames = {}
 	end
 
@@ -125,7 +131,7 @@ local function PrivateClass()
 
 		tilingMap.player = obj:CreateTextureFrame("TileZ_PlayerDot", WorldMapFrame.ScrollContainer, whiteTexture)
 		tilingMap.player:SetSize(2, 2)
-		tilingMap.player.texture:SetVertexColor(1, 0, 1, 1)
+		tilingMap.player.texture:SetVertexColor(0, 0, 0, 1)
 		tilingMap.player:SetFrameStrata("DIALOG")
 		tilingMap.player:Hide()
 
@@ -481,10 +487,6 @@ local function PrivateClass()
 			tileFrame:SetSize(tilePixelSize, tilePixelSize)
 			tileFrame:SetPoint("TOPLEFT", tileParent, "TOPLEFT", framePosX, framePosY)
 			tileFrame:Show()
-
-			log:Info(string.format("Draw tile: %.2f, %.2f | %.2f, %.2f",
-				tileIdX, tileIdY, deltaX, deltaY
-			))
 
 			local strata = utils:Turnary(isPlayerTile, "TOOLTIP", "MEDIUM")
 			tileFrame:SetFrameStrata(strata)

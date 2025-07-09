@@ -1,15 +1,15 @@
 local data = {}
 
 data.estimatedArea = {}
-data.estimatedArea.width = 0
-data.estimatedArea.height = 0
-data.estimatedArea.refWorldX = 0
-data.estimatedArea.refWorldY = 0
-data.estimatedArea.refMapX = 0
-data.estimatedArea.refMapY = 0
+data.estimatedArea.width = 4399
+data.estimatedArea.height = 2933
+data.estimatedArea.refWorldX = -1356.5
+data.estimatedArea.refWorldY = -4827.5
+data.estimatedArea.refMapX = 0.2098133563995361
+data.estimatedArea.refMapY = 0.2934608459472656
 
 data.units = {
 
 }
 
---ledii.zones[0] = data
+ledii.zones[1441] = data
