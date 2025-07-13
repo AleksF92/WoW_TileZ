@@ -28,7 +28,7 @@ local function PrivateClass()
 	local screenCoverTexture = "Interface\\Addons\\TileZ\\Textures\\Screen_Cover"
 
 	local tileSizeOptions = { 50, 100, 150, 200 }
-	local startTilesOptions = { 1.0, 2.0, 3.0 }
+	local startTilesOptions = { 1.0, 2.0, 3.0, 4.0, 5.0 }
 	local xpRateOptions = { 1.0, 2.0, 3.0 }
 	local refreshMap = false
 
@@ -157,7 +157,7 @@ local function PrivateClass()
 
 		tilingSettings.startTilesSelector = obj:CreateSelectorFrame(
 			"Tilez_StartTilesSelector", tilingSettings.container,
-			"Start Tiles", { "1x", "2x", "3x" },
+			"Start Tiles", { "1x", "2x", "3x", "4x", "5x" },
 			startTilesOptions, tiling.startCount, obj.OnStartTilesSelected
 		)
 		tilingSettings.startTilesSelector:SetPoint("TOP", tilingSettings.tileSizeSelector, "BOTTOM", 0, 0)
@@ -392,7 +392,8 @@ local function PrivateClass()
 		if (worldData == nil) then return end
 		--Calculate frame size based on zoom
 		local tiling = _G.LEDII_TILE_TILING
-		local frameSize = worldData.tileSize * obj:GetZoomMultiplier(worldData.zoneId, tiling.isIndoor)
+		local isInside = tiling.isInsideZone or tiling.isInsideArea
+		local frameSize = worldData.tileSize * obj:GetZoomMultiplier(worldData.zoneId, isInside)
 
 		--Show surrounding tiles
 		local frameIndex = 1
@@ -542,13 +543,7 @@ local function PrivateClass()
 	function obj:GetZoomMultiplier(zoneId, isIndoor)
 		local zoomOffsets = { 0.0, 0.175, 0.4, 0.75, 1.3, 2.5 }
 
-		local cityIds = {
-			1453, --Stormwind
-			1455, --Ironforge
-			1457, --Darnassus
-		}
-
-		if (utils:TableContains(cityIds, zoneId) and isIndoor) then --Stormwind
+		if (isIndoor) then
 			zoomOffsets = { 0.5, 1.0, 1.6, 2.75, 5, 9 }
 		end
 

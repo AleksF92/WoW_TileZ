@@ -37,7 +37,8 @@ local function PrivateClass()
 	obj.textures.minimap = "Outline"
 	obj.textures.map = "Outline"
 
-	obj.isIndoor = false
+	obj.isInsideZone = false
+	obj.isInsideArea = false
 
 	obj.renderDistance = 3
 
@@ -71,7 +72,8 @@ local function PrivateClass()
 		obj.textures.map = obj.textures.map or "Outline"
 
 		obj.renderDistance = LediiData_TileZ_Character.renderDistance or 3
-		obj.isIndoor = LediiData_TileZ_Character.isIndoor or false
+		obj.isInsideZone = LediiData_TileZ_Character.isInsideZone or false
+		obj.isInsideArea = LediiData_TileZ_Character.isInsideArea or false
 	end
 
 	function obj:Save()
@@ -91,7 +93,8 @@ local function PrivateClass()
 		LediiData_TileZ_Character.textures = obj.textures
 
 		LediiData_TileZ_Character.renderDistance = obj.renderDistance
-		LediiData_TileZ_Character.isIndoor = obj.isIndoor
+		LediiData_TileZ_Character.isInsideZone = obj.isInsideZone
+		LediiData_TileZ_Character.isInsideArea = obj.isInsideArea
 	end
 
 	function obj:Reset()
@@ -307,14 +310,14 @@ local function PrivateClass()
 		unlockedTiles[continentId][zoneId][tileKey] = true
 
 		if (isZoneBorderException) then
-			log:Info("Unlocked exception tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+			--log:Info("Unlocked exception tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
 		elseif (debug) then
 			totalTiles = totalTiles + 1
-			log:Info("Unlocked debug tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+			--log:Info("Unlocked debug tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
 		else
 			totalTiles = totalTiles + 1
 			availableTiles = availableTiles - 1
-			log:Info("Unlocked consumed tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+			--log:Info("Unlocked consumed tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
 		end
 
 		obj:Save()
@@ -349,11 +352,11 @@ local function PrivateClass()
 	end
 
 	function obj:OnZoneChanged(indoors)
-		if (indoors == obj.isIndoor) then return end
+		if (indoors == obj.isInsideZone) then return end
 
-		obj.isIndoor = indoors
+		obj.isInsideZone = indoors
 		obj:Save()
-		log:Info("OnZoneChanged: " .. tostring(indoors))
+		--log:Info("OnZoneChanged: " .. tostring(indoors))
 	end
 
 	function obj:OnExperienceChanged(source, xp, historicLevel)
@@ -380,6 +383,11 @@ local function PrivateClass()
 		if (UnitOnTaxi("player") and obj.lockMode ~= "Transport") then
 			obj.lockMode = "Transport"
 			ui:SetupUnlockButtonStatus()
+		end
+
+		if (IsIndoors() ~= obj.isInsideArea) then
+			obj.isInsideArea = IsIndoors()
+			obj:Save()
 		end
 
 		worldData = obj:GetWorldPositionData()
