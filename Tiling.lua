@@ -448,13 +448,13 @@ local function PrivateClass()
 	function obj:SetManualTiles(delta)
 		if (delta < 0) then
 			if (math.abs(delta) <= availableTiles) then
-				log:Info("Removed " .. count .. " tiles")
+				log:Info("Removed " .. delta .. " tiles")
 				availableTiles = availableTiles - delta
 			else 
 				log:Info("Not enough available tiles to remove")
 			end
 		elseif (delta > 0) then
-			log:Info("Added " .. count .. " tiles")
+			log:Info("Added " .. delta .. " tiles")
 			availableTiles = availableTiles + delta
 		end
 		

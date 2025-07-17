@@ -1,6 +1,6 @@
 ## Interface: 11507
 ## Title: TileZ
-## Version: 1.0.1
+## Version: 1.0.2
 ## Author: Aleksander Fimreite
 ## Dependencies: 
 ## OptDeps: 
@@ -17,6 +17,7 @@ Data/Zones/Kalimdor/Darkshore.lua
 Data/Zones/Kalimdor/Darnassus.lua
 Data/Zones/Kalimdor/Durotar.lua
 Data/Zones/Kalimdor/Desolace.lua
+
 Data/Zones/Kalimdor/DustwallowMarsh.lua
 Data/Zones/Kalimdor/Felwood.lua
 Data/Zones/Kalimdor/Feralas.lua

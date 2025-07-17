@@ -31,12 +31,18 @@ local function PrivateClass()
 	end
 
 	function obj:Add(args)
-		local count = math.abs(args[2])
+		local number = tonumber(args[2])
+		if (number == nil) then return end
+
+		local count = math.abs(number)
 		tiling:SetManualTiles(count)
 	end
 
 	function obj:Remove(args)
-		local count = math.abs(args[2])
+		local number = tonumber(args[2])
+		if (number == nil) then return end
+
+		local count = math.abs(number)
 		tiling:SetManualTiles(-count)
 	end
 
