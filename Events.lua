@@ -23,6 +23,8 @@ local function PrivateClass()
 	end
 
 	function obj:OnExperienceChanged(xp)
+		if (xp == nil) then return end
+		if (xp <= 0) then return end
 		tiling:OnExperienceChanged(obj.xpSource, xp)
 	end
 

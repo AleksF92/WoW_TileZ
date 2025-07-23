@@ -412,7 +412,7 @@ local function PrivateClass()
 	end
 
 	function obj:OnExperienceChanged(source, xp, historicLevel)
-		log:Info("Experience changed: +" .. xp .. " from " .. source)
+		--log:Info("Experience changed: +" .. xp .. " from " .. source)
 		local xpGain = xp * obj.xpRate
 		currentXP = currentXP + xpGain
 
