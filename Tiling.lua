@@ -14,6 +14,7 @@ local function PrivateClass()
 	local nextXP = 0
 	local availableTiles = 0
 	local totalTiles = 0
+	local totalInstances = 0
 	local unlockedTiles = {}
 
 	local worldData = nil
@@ -60,6 +61,7 @@ local function PrivateClass()
 		currentXP = LediiData_TileZ_Character.currentXP or 0
 		availableTiles = LediiData_TileZ_Character.availableTiles or obj.startCount
 		totalTiles = LediiData_TileZ_Character.totalTiles or 0
+		totalInstances = LediiData_TileZ_Character.totalInstances or 0
 		unlockedTiles = LediiData_TileZ_Character.unlockedTiles or {}
 
 		obj.colors = LediiData_TileZ_Character.colors or {}
@@ -83,6 +85,7 @@ local function PrivateClass()
 		LediiData_TileZ_Character.currentXP = currentXP
 		LediiData_TileZ_Character.availableTiles = availableTiles
 		LediiData_TileZ_Character.totalTiles = totalTiles
+		LediiData_TileZ_Character.totalInstances = totalInstances
 		LediiData_TileZ_Character.unlockedTiles = unlockedTiles
 
 		LediiData_TileZ_Character.tileSize = obj.tileSize
@@ -110,7 +113,7 @@ local function PrivateClass()
 
 		nextXP = obj:CalculateNextXP(1)
 
-		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 		ui:UpdateSettings()
 	end
 	----- SETUP END -----
@@ -145,16 +148,29 @@ local function PrivateClass()
 		--if (true) then return nil end
 
 		data.zoneId = C_Map.GetBestMapForUnit("player")
+		if (data.zoneId ~= nil) then
+			data.zoneName = C_Map.GetMapInfo(data.zoneId).name
+			data.continentId = C_Map.GetMapInfo(data.zoneId).parentMapID
+			data.continentName = C_Map.GetMapInfo(data.continentId).name
+		else
+			local name, _, _, _, _, _, _, mapID = GetInstanceInfo()
+			data.zoneId = mapID
+			data.zoneName = name
+			data.continentId = 999999
+			data.continentName = "Instance"
+		end
+		if (data.zoneId == 0) then return nil end
 
-		if (data.zoneId == nil) then return nil end
-		data.zoneName = C_Map.GetMapInfo(data.zoneId).name
-		data.continentId = C_Map.GetMapInfo(data.zoneId).parentMapID
-		data.continentName = C_Map.GetMapInfo(data.continentId).name
+		if (data.continentId ~= nil and data.continentName ~= "Instance") then
+			local worldY, worldX = UnitPosition("player")
+			data.world = { x = worldX, y = worldY }
+			local mapX, mapY = C_Map.GetPlayerMapPosition(data.zoneId, "player"):GetXY()
+			data.map = { x = mapX, y = mapY }
+		else
+			data.world = { x = obj.tileSize * 0.5, y = obj.tileSize * 0.5 }
+			data.map = { x = 0, y = 0 }
+		end
 
-		local worldY, worldX = UnitPosition("player")
-		local mapX, mapY = C_Map.GetPlayerMapPosition(data.zoneId, "player"):GetXY()
-		data.world = { x = worldX, y = worldY }
-		data.map = { x = mapX, y = mapY }
 		data.tile = { x = data.world.x / obj.tileSize , y = data.world.y / obj.tileSize }
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
 		data.tileSize = obj.tileSize
@@ -165,7 +181,8 @@ local function PrivateClass()
 		if (worldData == nil) then return data end
 
 		data.isNewZone = data.zoneId ~= worldData.zoneId
-		if (data.isNewZone) then
+		data.isNewContinent = data.continentId ~= worldData.continentId
+		if (data.isNewZone and not data.isNewContinent) then
 			data.isUnlocked = worldData.isUnlocked
 			obj:UnlockCurrentTile(data)
 		else
@@ -292,13 +309,39 @@ local function PrivateClass()
 		return true
 	end
 
+	function obj:GetUnlockCost(unlockData)
+		if (unlockData.continentName == "Instance") then
+			local tier = 1
+			local cost = nil
+
+			if (utils:TableContains(ledii.instances.freeTier, unlockData.zoneId)) then
+				cost = 0
+			end
+
+			while (tier <= 5 and cost == nil) do
+				local tierData = ledii.instances.tiers[tier]
+				if (utils:TableContains(tierData, unlockData.zoneId)) then
+					cost = ledii.instances.unlockCosts[tier]
+				else
+					tier = tier + 1
+				end
+			end
+
+			return cost
+		end
+
+		return 1
+	end
+
 	function obj:UnlockCurrentTile(unlockData)
 		local tileKey = obj:GetTileKey(unlockData.tile.x, unlockData.tile.y)
 		local zoneId = unlockData.zoneId
 		local continentId = unlockData.continentId
 
-		local isZoneBorderException = unlockData.isNewZone and unlockData.isUnlocked
-		local canUnlock = availableTiles > 0 or isZoneBorderException or debug
+		local cost = obj:GetUnlockCost(unlockData) or 0
+		local isInstance = unlockData.continentName == "Instance"
+		local isZoneBorderException = unlockData.isNewZone and unlockData.isUnlocked and not isInstance
+		local canUnlock = availableTiles >= cost or isZoneBorderException or debug
 
 		if (obj.lockMode ~= "Unlocked" and not isZoneBorderException) then return end
 		if (unlockData.isTransport) then return end
@@ -309,19 +352,28 @@ local function PrivateClass()
 		unlockedTiles[continentId][zoneId] = unlockedTiles[continentId][zoneId] or {}
 		unlockedTiles[continentId][zoneId][tileKey] = true
 
-		if (isZoneBorderException) then
-			--log:Info("Unlocked exception tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
-		elseif (debug) then
-			totalTiles = totalTiles + 1
-			--log:Info("Unlocked debug tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+		if (debug) then
+			if (isInstance) then
+				totalInstances = totalInstances + 1
+				--log:Info("Unlocked debug dungeon: " .. unlockData.zoneName)
+			elseif (not isZoneBorderException) then
+				totalTiles = totalTiles + 1
+				--log:Info("Unlocked debug tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+			end
 		else
-			totalTiles = totalTiles + 1
-			availableTiles = availableTiles - 1
-			--log:Info("Unlocked consumed tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+			if (isInstance) then
+				totalInstances = totalInstances + 1
+				availableTiles = availableTiles - cost
+				--log:Info("Unlocked consumed dungeon: " .. unlockData.zoneName)
+			elseif (not isZoneBorderException) then
+				totalTiles = totalTiles + 1
+				availableTiles = availableTiles - cost
+				--log:Info("Unlocked consumed tile: " .. unlockData.tileId.x .. ", " .. unlockData.tileId.y)
+			end
 		end
 
 		obj:Save()
-		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 	end
 
 	function obj:GetTileKey(tileX, tileY)
@@ -348,7 +400,7 @@ local function PrivateClass()
 		nextXP = obj:CalculateNextXP()
 
 		ui:SetupTiling()
-		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 	end
 
 	function obj:OnZoneChanged(indoors)
@@ -360,7 +412,7 @@ local function PrivateClass()
 	end
 
 	function obj:OnExperienceChanged(source, xp, historicLevel)
-		--log:Info("Experience changed: +" .. xp .. " from " .. source)
+		log:Info("Experience changed: +" .. xp .. " from " .. source)
 		local xpGain = xp * obj.xpRate
 		currentXP = currentXP + xpGain
 
@@ -375,7 +427,7 @@ local function PrivateClass()
 
 		if (historicLevel == nil) then
 			obj:Save()
-			ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+			ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 		end
 	end
 
@@ -442,7 +494,7 @@ local function PrivateClass()
 		availableTiles = availableTiles + obj.startCount
 
 		obj:Save()
-		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 	end
 
 	function obj:SetManualTiles(delta)
@@ -459,7 +511,7 @@ local function PrivateClass()
 		end
 		
 		obj:Save()
-		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+		ui:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 	end
 	----- EVENTS END -----
 

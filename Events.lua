@@ -5,30 +5,49 @@ local tiling = _G.LEDII_TILE_TILING
 
 local function PrivateClass()
 	local obj = {}
-	local ignoreNextCombat = false
+
+	obj.xpLevel = 1
+	obj.xpAmount = 0
+	obj.xpNext = 0
+	obj.xpSource = ""
 
 	function obj:OnPlayerLogin()
+		obj.xpLevel = UnitLevel("player")
+		obj.xpAmount = UnitXP("player")
+		obj.xpNext = UnitXPMax("player")
+
 		log:Info("Version " .. const:String("VERSION") .. " loaded!")
 		log:Info(_G.LEDII_TILE_WELCOME)
 
 		tiling:OnPlayerLogin() --sometimes fails
 	end
 
-	function obj:OnExperienceChanged(source, xp)
-		if (source == "COMBAT" and ignoreNextCombat) then
-			ignoreNextCombat = false
-			return
-		end
-
-		if (source == "QUEST") then
-			ignoreNextCombat = true
-		end
-
-		tiling:OnExperienceChanged(source, xp)
+	function obj:OnExperienceChanged(xp)
+		tiling:OnExperienceChanged(obj.xpSource, xp)
 	end
 
 	function obj:OnZoneChanged(indoors)
 		tiling:OnZoneChanged(indoors)
+	end
+
+	function obj:ParseCombatXP(message)
+		local output = {}
+		log:Info("Parsing 2: " .. message)
+
+		-- This regex will match all numbers in the message
+		local numbers = {}
+		for num in message:gmatch("%d+") do
+			table.insert(numbers, tonumber(num))
+		end
+
+		if (#numbers > 0) then
+			output.total = numbers[1]
+		end
+		if (#numbers > 1) then
+			output.bonus = numbers[2]
+		end
+
+		return output
 	end
 
 	return obj
@@ -40,19 +59,21 @@ _G.LEDII_TILE_EVENTS = class
 local function OnEvent(self, event, ...)
 	if (event == "PLAYER_LOGIN") then
 		class:OnPlayerLogin()
+	elseif (event == "PLAYER_XP_UPDATE") then
+		local xpDelta = UnitXP("player") - class.xpAmount
+		if (UnitLevel("player") > class.xpLevel) then
+			xpDelta = class.xpNext - class.xpAmount + UnitXP("player")
+		end
+		class.xpLevel = UnitLevel("player")
+		class.xpAmount = UnitXP("player")
+		class.xpNext = UnitXPMax("player")
+		class:OnExperienceChanged(xpDelta)
 	elseif (event == "CHAT_MSG_COMBAT_XP_GAIN") then
-		local message = ...
-		local xp = tonumber(message:match("gain (%d+) experience"))
-        local bonus = message:match("%+%d+ exp Rested bonus")
-		class:OnExperienceChanged("COMBAT", xp)
+		class.xpSource = "COMBAT"
 	elseif (event == "CHAT_MSG_SYSTEM") then
-		local message = ...
-		local xp = string.match(message, "^Discovered .-: (%d+) experience gained$")
-		if (xp == nil) then return end
-		class:OnExperienceChanged("DISCOVER", xp)
+		class.xpSource = "DISCOVER"
 	elseif (event == "QUEST_TURNED_IN") then
-		local id, xp = ...
-		class:OnExperienceChanged("QUEST", xp)
+		class.xpSource = "QUEST"
 	elseif (event == "ZONE_CHANGED") then
 		class:OnZoneChanged(false)
 	elseif (event == "ZONE_CHANGED_INDOORS") then
@@ -63,6 +84,7 @@ end
 --Register the event
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_XP_UPDATE")
 frame:RegisterEvent("CHAT_MSG_COMBAT_XP_GAIN")
 frame:RegisterEvent("CHAT_MSG_SYSTEM")
 frame:RegisterEvent("QUEST_TURNED_IN")

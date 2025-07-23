@@ -31,6 +31,9 @@ local function class()
 		elseif (type == "ERROR") then return "|cFFff0000"
 		elseif (type == "LOOT_ITEM") then return "|cFFffdd00"
 		elseif (type == "QUEST_ITEM") then return "|cFFdd4444"
+
+		elseif (type == "POSITIVE_VALUE") then return "|cFF00ff00"
+		elseif (type == "NEGATIVE_VALUE") then return "|cFFff0000"
 		end
 
 		return ""

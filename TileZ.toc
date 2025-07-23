@@ -1,6 +1,6 @@
 ## Interface: 11507
 ## Title: TileZ
-## Version: 1.0.2
+## Version: 1.1.0
 ## Author: Aleksander Fimreite
 ## Dependencies: 
 ## OptDeps: 
@@ -8,7 +8,8 @@
 ## SavedVariablesPerCharacter: LediiData_TileZ_Character
 
 DataSetup.lua
-Data/Player/PlayerExperience.lua
+Data/PlayerData.lua
+Data/InstanceData.lua
 
 # Kalimdor
 Data/Zones/Kalimdor/Ashenvale.lua

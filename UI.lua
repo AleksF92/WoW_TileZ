@@ -196,24 +196,24 @@ local function PrivateClass()
 
 		tilingBlocker.label = obj:CreateLabelFrame("TileZ_BlockerLabel", tilingBlocker.container)
 		tilingBlocker.label:SetPoint("CENTER", tilingBlocker.container, "CENTER", 0, 150)
-		tilingBlocker.label:SetText("This tile is not unlocked yet")
 		local fontFile, fontSize, fontFlags = tilingBlocker.label:GetFont()
 		tilingBlocker.label:SetFont(fontFile, 24, fontFlags)
 	end
 
-	function obj:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles)
+	function obj:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 		tilingStatus.xpBar:SetMinMaxValues(0, nextXP)
 		tilingStatus.xpBar:SetValue(currentXP)
 		tilingStatus.xpBar.text:SetText(string.format("Next Tile XP %d / %d", currentXP, nextXP))
 
 		tilingStatus.availableLabel:SetText(availableTiles)
-		tilingStatus.totalLabel:SetText(totalTiles)
+		tilingStatus.totalLabel:SetText(string.format("%d / %d", totalTiles, totalInstances))
 	end
 
 	function obj:OnPositionChanged(worldData, mapData, measureData)
 		--Update label info
 		tilingStatus.positionLabel:SetText(obj:GetPositionText(worldData))
 		tilingStatus.measureLabel:SetText(obj:GetMeasureText(measureData))
+		tilingBlocker.label:SetText(obj:GetBlockerText(worldData))
 
 		--Update minimap tiles
 		obj:UpdateMinimapTiles(worldData)
@@ -376,11 +376,49 @@ local function PrivateClass()
 			return "?.??, ?.??"
 		end
 
+		if (worldData.continentName == "Instance") then
+			if (IsShiftKeyDown()) then
+				return string.format("Instance: %d", worldData.zoneId)
+			else
+				return worldData.zoneName
+			end
+		end
+
 		if (IsShiftKeyDown()) then
-			return string.format("%d, %d", worldData.world.x, worldData.world.y)
+			return string.format("World: %d, %d", worldData.world.x, worldData.world.y)
 		else
 			return string.format("%.2f, %.2f", worldData.tile.x, worldData.tile.y)
 		end
+	end
+
+	function obj:GetBlockerText(worldData)
+		if (worldData ~= nil) then
+			if (worldData.continentName == "Instance") then
+				local message = "This instance is not unlocked yet"
+
+				local tiling = _G.LEDII_TILE_TILING
+				local cost = tiling:GetUnlockCost(worldData)
+				if (cost ~= nil) then
+					if (cost > 0) then
+						message = message .. string.format("\nUnlock cost is %s%d Tiles",
+							const:Color("NEGATIVE_VALUE"), cost
+						)
+					else
+						message = message .. string.format("\nUnlock cost is %sFree",
+							const:Color("POSITIVE_VALUE")
+						)
+					end
+				else
+					message = message .. string.format("\nUnlock cost is %sUndefined (Free)\n\n%sPlease report bug if found!",
+						const:Color("POSITIVE_VALUE"), const:Color("WARNING")
+					)
+				end
+
+				return message
+			end
+		end
+
+		return "This tile is not unlocked yet"
 	end
 
 	function obj:UpdateMinimapTiles(worldData)
