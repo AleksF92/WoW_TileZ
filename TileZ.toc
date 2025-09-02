@@ -1,6 +1,6 @@
 ## Interface: 11507
 ## Title: TileZ
-## Version: 1.1.0
+## Version: 1.1.1
 ## Author: Aleksander Fimreite
 ## Dependencies: 
 ## OptDeps: 
