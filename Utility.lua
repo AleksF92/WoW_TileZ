@@ -157,6 +157,22 @@ local function class()
 		return default -- not found
 	end
 
+	function obj:DistanceSquared(positionA, positionB)
+		local dx = positionB.x - positionA.x
+		local dy = positionB.y - positionA.y
+		return dx*dx + dy*dy
+	end
+
+	function obj:GetPointByName(frame, searchPoint)
+		for i = 1, frame:GetNumPoints(point) do
+			local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint(i)
+			if (point == searchPoint) then
+				return xOfs, yOfs
+			end
+		end
+		return nil, nil
+	end
+
 	return obj
 end
 

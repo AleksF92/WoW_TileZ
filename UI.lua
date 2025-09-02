@@ -15,11 +15,21 @@ local function PrivateClass()
 	local tilingSettings = {}
 	local tilingBlocker = {}
 	local tilingTaxi = {}
+	local tilingIntro = {}
 
 	local whiteTexture = "Interface\\Buttons\\WHITE8x8"
 	local minimapMaskTexture = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
-	local minimapTileTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
-	local mapGridTexture = "Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px"
+	local minimapTileTextureMip = {
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_1px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_2px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_4px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_6px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_8px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_10px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_12px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_14px",
+		"Interface\\Addons\\TileZ\\Textures\\Tile_Outline_16px"
+	}
 	local settingsTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Cogwheel"
 	local lockedModeTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Closed"
 	local unlockedModeTexture = "Interface\\Addons\\TileZ\\Textures\\Icon_Padlock_Open"
@@ -27,13 +37,13 @@ local function PrivateClass()
 	local buttonFrameTexture = "Interface\\Buttons\\UI-Panel-Button-Down"
 	local screenCoverTexture = "Interface\\Addons\\TileZ\\Textures\\Screen_Cover"
 
-	local tileSizeOptions = { 50, 100, 150, 200 }
-	local startTilesOptions = { 1.0, 2.0, 3.0, 4.0, 5.0 }
-	local xpRateOptions = { 1.0, 2.0, 3.0 }
 	local refreshMap = false
-
-	local shiftOffsetX = 100000
-	local shiftOffsetY = 100000
+	local cachedMinimapSize = 0
+	local PRESS_DOWN_COUNT = 0
+	local PRESS_UP_COUNT = -1
+	local showIntro = false
+	local GRID_OFFSET_N = -100000
+	local GRID_OFFSET_W = 100000
 	----- VARIABLES END -----
 
 
@@ -45,6 +55,7 @@ local function PrivateClass()
 		obj:SetupTilingMap()
 		obj:SetupTilingSettings()
 		obj:SetupTilingBlocker()
+		obj:SetupIntro()
 	end
 
 	function obj:SetupTilingStatus()
@@ -81,16 +92,16 @@ local function PrivateClass()
 			tilingStatus.measureLabel:Show()
 		end
 
-		tilingStatus.settingsButton = obj:CreateButtonFrame("TileZ_SettingsButton", tilingStatus.container, false, settingsTexture, 10)
+		tilingStatus.settingsButton = obj:CreateButtonFrame("TileZ_SettingsButton", tilingStatus.container, settingsTexture, 10)
 		tilingStatus.settingsButton:SetPoint("RIGHT", tilingStatus.container, "LEFT", 0, 0)
 		tilingStatus.settingsButton:SetSize(40, 40)
-		tilingStatus.settingsButton:SetScript("OnClick", obj.OnSettingsButtonClicked)
+		tilingStatus.settingsButton.onMouseHeld = obj.OnSettingsButtonClicked
 
-		tilingStatus.unlockButton = obj:CreateButtonFrame("TileZ_UnlockButton", tilingStatus.container, true, lockedModeTexture, 10)
+		tilingStatus.unlockButton = obj:CreateButtonFrame("TileZ_UnlockButton", tilingStatus.container, lockedModeTexture, 10)
 		tilingStatus.unlockButton:SetPoint("LEFT", tilingStatus.container, "RIGHT", 0, 0)
 		tilingStatus.unlockButton:SetSize(40, 40)
 		tilingStatus.unlockButton.frame:SetBackdropColor(1, 0, 0, 0.5)
-		tilingStatus.unlockButton:SetScript("OnClick", obj.OnUnlockButtonClicked)
+		tilingStatus.unlockButton.onMouseHeld = obj.OnUnlockButtonClicked
 	end
 
 	function obj:SetupTilingMinimap()
@@ -145,40 +156,46 @@ local function PrivateClass()
 
 		tilingSettings.container = obj:CreateBackdropFrame("Tilez_StatusContainer", tilingStatus.container)
 		tilingSettings.container:SetPoint("TOP", tilingStatus.container, "BOTTOM", 0, 0)
-		tilingSettings.container:SetSize(400, 170)
+		tilingSettings.container:SetSize(400, 160)
 		tilingSettings.container:Hide()
 
-		tilingSettings.tileSizeSelector = obj:CreateSelectorFrame(
+		tilingSettings.tileSizeSelector = obj:CreateIncrementFrame(
 			"Tilez_TileSizeSelector", tilingSettings.container,
-			"Tile Size", { "50 yards", "100 yards", "150 yards", "200 yards" },
-			tileSizeOptions,tiling.tileSize, obj.OnTileSizeSelected
+			"Tile Size", "%d yards", 5, 1000, 5,
+			tiling.tileSize, obj.OnTileSizeSelected
 		)
 		tilingSettings.tileSizeSelector:SetPoint("TOP", tilingSettings.container, "TOP", 0, -10)
 
-		tilingSettings.startTilesSelector = obj:CreateSelectorFrame(
+		tilingSettings.startTilesSelector = obj:CreateIncrementFrame(
 			"Tilez_StartTilesSelector", tilingSettings.container,
-			"Start Tiles", { "1x", "2x", "3x", "4x", "5x" },
-			startTilesOptions, tiling.startCount, obj.OnStartTilesSelected
+			"Start Tiles", "%dx", 1, 10, 1,
+			tiling.startCount, obj.OnStartTilesSelected
 		)
 		tilingSettings.startTilesSelector:SetPoint("TOP", tilingSettings.tileSizeSelector, "BOTTOM", 0, 0)
 
-		tilingSettings.xpRateSelector = obj:CreateSelectorFrame(
+		tilingSettings.xpRateSelector = obj:CreateIncrementFrame(
 			"Tilez_XPRateSelector", tilingSettings.container,
-			"XP Rate", { "1x", "2x", "3x" },
-			xpRateOptions, tiling.xpRate, obj.OnXPRateSelected
+			"XP Rate", "%.1fx", 0, 10, 0.1,
+			tiling.xpRate, obj.OnXPRateSelected
 		)
 		tilingSettings.xpRateSelector:SetPoint("TOP", tilingSettings.startTilesSelector, "BOTTOM", 0, 0)
 
-		tilingSettings.authorLabel = obj:CreateLabelFrame("TileZ_AuthorLabel", tilingSettings.container)
-		tilingSettings.authorLabel:SetPoint("BOTTOMRIGHT", tilingSettings.container, "BOTTOMRIGHT", -20, 14)
-		tilingSettings.authorLabel:SetText("TileZ by Ledii")
-		tilingSettings.authorLabel:SetTextColor(0.6, 0.6, 0.6, 1)
+		tilingSettings.progressLabel = obj:CreateLabelFrame("TileZ_HintLabel", tilingSettings.container)
+		tilingSettings.progressLabel:SetPoint("BOTTOMLEFT", tilingSettings.container, "BOTTOMLEFT", 14, 14)
+		tilingSettings.progressLabel:SetText(
+			const:Color("UNCOMMON") .. "Progress status" .. const:Color("TEXT_HIGHLIGHT")
+			.. "\nAvailable: ???? Tiles"
+			.. "\nnUnlocked: ???? Tiles / ?? Instances"
+		)
+		tilingSettings.progressLabel:SetTextColor(1, 1, 1, 1)
+		tilingSettings.progressLabel:SetJustifyH("LEFT")
 
-		tilingSettings.hintLabel = obj:CreateLabelFrame("TileZ_HintLabel", tilingSettings.container)
-		tilingSettings.hintLabel:SetPoint("BOTTOMLEFT", tilingSettings.container, "BOTTOMLEFT", 20, 14)
-		tilingSettings.hintLabel:SetText("Left Click: Toggle unlock\n\nRight Click: Toggle visibility")
-		tilingSettings.hintLabel:SetTextColor(1, 1, 1, 1)
-		tilingSettings.hintLabel:SetJustifyH("LEFT")
+		local version = GetAddOnMetadata("TileZ", "Version")
+		tilingSettings.versionLabel = obj:CreateLabelFrame("TileZ_HonorLabel", tilingSettings.container)
+		tilingSettings.versionLabel:SetPoint("BOTTOMRIGHT", tilingSettings.container, "BOTTOMRIGHT", -14, 14)
+		tilingSettings.versionLabel:SetText(string.format("v%s Beta", version))
+		tilingSettings.versionLabel:SetTextColor(0.6, 0.6, 0.6, 1)
+		tilingSettings.versionLabel:SetJustifyH("RIGHT")
 	end
 
 	function obj:SetupTilingBlocker()
@@ -200,6 +217,47 @@ local function PrivateClass()
 		tilingBlocker.label:SetFont(fontFile, 24, fontFlags)
 	end
 
+	function obj:SetupIntro()
+		tilingIntro.container = obj:CreateBackdropFrame("Tilez_IntroContainer", tilingStatus.container)
+		tilingIntro.container:SetPoint("TOP", tilingStatus.container, "BOTTOM", 0, 0)
+		tilingIntro.container:SetSize(400, 276)
+		tilingIntro.container:Hide()
+
+		tilingIntro.headerLabel = obj:CreateLabelFrame("TileZ_IntroHeaderLabel", tilingIntro.container)
+		tilingIntro.headerLabel:SetPoint("TOPLEFT", tilingSettings.container, "TOPLEFT", 14, -14)
+		tilingIntro.headerLabel:SetText("Introduction to the Tile Challenge")
+		tilingIntro.headerLabel:SetTextColor(1, 1, 1, 1)
+		tilingIntro.headerLabel:SetJustifyH("LEFT")
+
+		tilingIntro.authorLabel = obj:CreateLabelFrame("TileZ_AuthorLabel", tilingIntro.container)
+		tilingIntro.authorLabel:SetPoint("TOPRIGHT", tilingIntro.container, "TOPRIGHT", -14, -14)
+		tilingIntro.authorLabel:SetText("TileZ by Ledii")
+		tilingIntro.authorLabel:SetTextColor(0.6, 0.6, 0.6, 1)
+
+		tilingIntro.descriptionLabel = obj:CreateLabelFrame("TileZ_IntroDescriptionLabel", tilingIntro.container)
+		tilingIntro.descriptionLabel:SetPoint("TOP", tilingIntro.headerLabel, "TOP", 0, -28)
+		tilingIntro.descriptionLabel:SetPoint("LEFT", tilingIntro.container, "LEFT", 14, 0)
+		tilingIntro.descriptionLabel:SetPoint("RIGHT", tilingIntro.container, "RIGHT", -14, 0)
+		tilingIntro.descriptionLabel:SetText(
+			const:Color("UNCOMMON") .. "Ruleset" .. const:Color("TEXT_HIGHLIGHT")
+			.. "\n\n"
+			.. "The world is divided into tiles and the player may only traverse within the boundaries of their unlocked tiles."
+			.. " To unlock new tiles the player must earn the rights to do so, either through gaining experience or completing personal insentives."
+			.. "\n\n"
+			.. "Unlocking your first tile will start your journey and lock your settings."
+			.. " For a faithful run you should not modify your settings during the playthrough,"
+			.. " but you may still do so for now as the balance level is still not determined."
+			.. "\n\n"
+			.. const:Color("UNCOMMON") .. "Hints" .. const:Color("TEXT_HIGHLIGHT")
+			.. "\n\n"
+			.. "Lock button interactions:"
+			.. "\n- Left Click: Use to progress your journey"
+			.. "\n- Right Click: Use for scouting, flights or ships"
+		)
+		tilingIntro.descriptionLabel:SetTextColor(1, 1, 1, 1)
+		tilingIntro.descriptionLabel:SetJustifyH("LEFT")
+	end
+
 	function obj:OnExperienceChanged(currentXP, nextXP, availableTiles, totalTiles, totalInstances)
 		tilingStatus.xpBar:SetMinMaxValues(0, nextXP)
 		tilingStatus.xpBar:SetValue(currentXP)
@@ -207,6 +265,13 @@ local function PrivateClass()
 
 		tilingStatus.availableLabel:SetText(availableTiles)
 		tilingStatus.totalLabel:SetText(string.format("%d / %d", totalTiles, totalInstances))
+
+		tilingSettings.progressLabel:SetText(string.format(
+			const:Color("UNCOMMON") .. "Progress status" .. const:Color("TEXT_HIGHLIGHT")
+			.. "\nAvailable: %d Tiles"
+			.. "\nUnlocked: %d Tiles / %d Instances",
+			availableTiles, totalTiles, totalInstances
+		))
 	end
 
 	function obj:OnPositionChanged(worldData, mapData, measureData)
@@ -235,7 +300,17 @@ local function PrivateClass()
 		--Update buttons
 		obj:SetSelectorEnabled(tilingSettings.tileSizeSelector, worldData.allowSetup)
 		obj:SetSelectorEnabled(tilingSettings.startTilesSelector, worldData.allowSetup)
-		obj:SetSelectorEnabled(tilingSettings.xpRateSelector, worldData.allowSetup)
+		obj:SetSelectorEnabled(tilingSettings.xpRateSelector, true)
+
+		--Modify rule changes
+		if (showIntro ~= worldData.allowSetup) then
+			showIntro = worldData.allowSetup
+			if (showIntro and not tilingSettings.container:IsShown()) then
+				tilingIntro.container:Show()
+			else
+				tilingIntro.container:Hide()
+			end
+		end
 
 		--Show blocker for current tile if nessesary
 		local shouldShowScreen = worldData.isUnlocked or worldData.isTransport
@@ -301,9 +376,10 @@ local function PrivateClass()
 		--Setup tiling
 		local pixelsPerWorldUnit = mapData.width / mapData.zoneEstimation.width
 		local tilePixelSize = tiling.tileSize * pixelsPerWorldUnit
+		local tileTextureMip = obj:GetTileTextureMip(tilePixelSize * 2)
 
 		tilingMap.grid:SetBackdrop({
-			bgFile = mapGridTexture,
+			bgFile = tileTextureMip,
 			tile = true,
 			tileSize = tilePixelSize
 		})
@@ -313,15 +389,14 @@ local function PrivateClass()
 		local sizeY = mapData.height + (tilePixelSize * 2)
 		tilingMap.grid:SetSize(sizeX, sizeY)
 
-		local tileW = (mapData.bounds.west + shiftOffsetX) / tiling.tileSize
-		local tileN = (mapData.bounds.north + shiftOffsetY) / tiling.tileSize
-		local relTileW = (tileW - utils:TruncateNumber(tileW)) - 1
-		local relTileN = (tileN - utils:TruncateNumber(tileN)) - 1
-		local offsetW = relTileW * tilePixelSize
-		local offsetN = -relTileN * tilePixelSize
-		--offsetW = utils:Turnary(offsetW < 0, offsetW, -offsetW)
-		--offsetN = utils:Turnary(offsetN < 0, -offsetN, offsetN)
-
+		--Calculate offset to align north west corner to grid
+		local tileW = (mapData.bounds.west / tiling.tileSize) + GRID_OFFSET_W
+		local tileN = (mapData.bounds.north / tiling.tileSize) + GRID_OFFSET_N
+		local relTileW = tileW - utils:TruncateNumber(tileW)
+		local relTileN = tileN - utils:TruncateNumber(tileN)
+		local offsetW = (1 - relTileW) * -tilePixelSize
+		local offsetN = relTileN * -tilePixelSize
+		
 		--log:Info(string.format("Zone offset: %.2f, %.2f | %.2f, %.2f | %.2f, %.2f",
 		--tileW, tileN, relTileW, relTileN, offsetW, offsetN))
 
@@ -333,7 +408,8 @@ local function PrivateClass()
 		--mapData.zoneEstimation.refWorldX, mapData.zoneEstimation.refWorldY,
 		--mapData.zoneEstimation.refMapX, mapData.zoneEstimation.refMapY))
 
-		tilingMap.grid:SetPoint("TOPLEFT", offsetW, offsetN)
+		tilingMap.grid:ClearAllPoints()
+		tilingMap.grid:SetPoint("TOPLEFT", tilingMap.gridMask, "TOPLEFT", offsetW, offsetN)
 
 		obj:UpdateMapTiles(mapData, worldData)
 	end
@@ -378,7 +454,12 @@ local function PrivateClass()
 
 		if (worldData.continentName == "Instance") then
 			if (IsShiftKeyDown()) then
-				return string.format("Instance: %d", worldData.zoneId)
+				if (worldData.nearestInstanceEntrance ~= nil) then
+					local wingId = worldData.nearestInstanceEntrance.entranceId
+					return string.format("Instance: %d (Wing: %d)", worldData.zoneId, wingId)
+				else
+					return string.format("Instance: %d", worldData.zoneId)
+				end
 			else
 				return worldData.zoneName
 			end
@@ -387,7 +468,7 @@ local function PrivateClass()
 		if (IsShiftKeyDown()) then
 			return string.format("World: %d, %d", worldData.world.x, worldData.world.y)
 		else
-			return string.format("%.2f, %.2f", worldData.tile.x, worldData.tile.y)
+			return string.format("Tile: %.2f, %.2f", worldData.tile.x, worldData.tile.y)
 		end
 	end
 
@@ -431,7 +512,9 @@ local function PrivateClass()
 		--Calculate frame size based on zoom
 		local tiling = _G.LEDII_TILE_TILING
 		local isInside = tiling.isInsideZone or tiling.isInsideArea
-		local frameSize = worldData.tileSize * obj:GetZoomMultiplier(worldData.zoneId, isInside)
+		local pixelsPerWorldUnit = obj:GetZoomMultiplier(worldData.zoneId, isInside)
+		local frameSize = worldData.tileSize * pixelsPerWorldUnit
+		local tileTextureMip = obj:GetTileTextureMip(frameSize)
 
 		--Show surrounding tiles
 		local frameIndex = 1
@@ -459,12 +542,13 @@ local function PrivateClass()
 					local tileFrame = tilingMinimap.tileFrames[frameIndex]
 					if (tileFrame == nil) then
 						local name = "TileZ_Section_" .. frameIndex
-						tileFrame = obj:CreateTextureFrame(name, tileParent, minimapTileTexture)
+						tileFrame = obj:CreateTextureFrame(name, tileParent, tileTextureMip)
 						tileFrame.texture:AddMaskTexture(tileParent.mask)
 						table.insert(tilingMinimap.tileFrames, tileFrame)
 					end
 
 					--Update tile
+					tileFrame.texture:SetTexture(tileTextureMip)
 					obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked, 0.4)
 					tileFrame:ClearAllPoints()
 					tileFrame:SetSize(frameSize, frameSize)
@@ -486,10 +570,16 @@ local function PrivateClass()
 		if (mapData.zoneEstimation == nil) then return end
 
 		local tiling = _G.LEDII_TILE_TILING
-		local tileW = utils:TruncateNumber((mapData.bounds.west + shiftOffsetX) / tiling.tileSize)
-		local tileN = utils:TruncateNumber((mapData.bounds.north + shiftOffsetY) / tiling.tileSize)
+		local offsetW, offsetN = utils:GetPointByName(tilingMap.grid, "TOPLEFT")
 		local pixelsPerWorldUnit = mapData.width / mapData.zoneEstimation.width
 		local tilePixelSize = tiling.tileSize * pixelsPerWorldUnit
+
+		local tileTextureMip = obj:GetTileTextureMip(tilePixelSize)
+		local updateMipTexture = false
+		if (tilePixelSize ~= cachedMinimapSize) then
+			cachedMinimapSize = tilePixelSize
+			updateMipTexture = true
+		end
 
 		--Show unlocked tiles
 		local frameIndex = 1
@@ -512,33 +602,34 @@ local function PrivateClass()
 		end
 		
 		for key, value in pairs(unlockedZoneTiles) do
+			--Fetch tile values
 			local keyParts = utils:Split(key, "_")
 			local tileIdX = tonumber(keyParts[1])
 			local tileIdY = tonumber(keyParts[2])
-			local shiftedWorldX = (tileIdX * tiling.tileSize) + shiftOffsetX
-			local shiftedWorldY = (tileIdY * tiling.tileSize) + shiftOffsetY
-			local shiftedTileIdX = (shiftedWorldX / tiling.tileSize) - 1
-			local shiftedTileIdY = (shiftedWorldY / tiling.tileSize) - 1
-			shiftedTileIdX = shiftedTileIdX + utils:Turnary(string.find(tileIdX, "-"), 0, 1)
-			shiftedTileIdY = shiftedTileIdY + utils:Turnary(string.find(tileIdY, "-"), 0, 1)
-
-			local deltaX = -(shiftedTileIdX - tileW)
-			local deltaY = shiftedTileIdY - tileN
-			local framePosX = deltaX * tilePixelSize
-			local framePosY = deltaY * tilePixelSize
-
 			local isPlayerTile = (key == worldData.tileKey)
 			local isUnlocked = utils:Turnary(isPlayerTile, worldData.isUnlocked, true)
+
+			--Calculate offset relative to topleft of grid
+			local relUnitsX = (tileIdX * tiling.tileSize) - mapData.bounds.west
+			local relUnitsY = (tileIdY * tiling.tileSize) - mapData.bounds.north
+			local relIdX = (-relUnitsX / tiling.tileSize) + utils:Turnary(string.find(tileIdX, "-"), 0, -1)
+			local relIdY = (relUnitsY / tiling.tileSize) + utils:Turnary(string.find(tileIdY, "-"), 0, 1)
+			local framePosX = (relIdX * tiling.tileSize * pixelsPerWorldUnit) - offsetW
+			local framePosY = (relIdY * tiling.tileSize * pixelsPerWorldUnit) - offsetN
 
 			--Initialize tile
 			local tileFrame = tilingMap.tileFrames[frameIndex]
 			if (tileFrame == nil) then
 				local name = "TileZ_Section_" .. frameIndex
-				tileFrame = obj:CreateTextureFrame(name, tileParent, minimapTileTexture)
+				tileFrame = obj:CreateTextureFrame(name, tileParent, tileTextureMip)
 				table.insert(tilingMap.tileFrames, tileFrame)
 			end
 
 			--Update tile
+			if (updateMipTexture) then
+				tileFrame.texture:SetTexture(tileTextureMip)
+			end
+			
 			obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked)
 			tileFrame:ClearAllPoints()
 			tileFrame:SetSize(tilePixelSize, tilePixelSize)
@@ -550,6 +641,21 @@ local function PrivateClass()
 
 			frameIndex = frameIndex + 1
 		end
+	end
+
+	function obj:GetTileTextureMip(size)
+		--log:Info("pixelsPerWorldUnit: " .. size)
+
+		if (size < 7) then return minimapTileTextureMip[9] end
+		if (size < 8.5) then return minimapTileTextureMip[8] end
+		if (size < 10) then return minimapTileTextureMip[7] end
+		if (size < 12.5) then return minimapTileTextureMip[6] end
+		if (size < 15) then return minimapTileTextureMip[5] end
+		if (size < 25) then return minimapTileTextureMip[4] end
+		if (size < 50) then return minimapTileTextureMip[3] end
+		if (size < 100) then return minimapTileTextureMip[2] end
+
+		return minimapTileTextureMip[1]
 	end
 
 	function obj:SetTileColor(tileFrame, isPlayerTile, isUnlocked, alpha)
@@ -609,28 +715,44 @@ local function PrivateClass()
 		selector.valueLabel:SetText(selector.optionTexts[selector.index])
 	end
 
-	function obj:UpdateSettings()
-		local tiling = _G.LEDII_TILE_TILING
-		obj:SetSelectorValue(tilingSettings.tileSizeSelector, tiling.tileSize)
-		obj:SetSelectorValue(tilingSettings.startTilesSelector, tiling.startCount)
-		obj:SetSelectorValue(tilingSettings.xpRateSelector, tiling.xpRate)
+	function obj:SetIncrementValue(selector, value)
+		selector.value = value
+		selector.valueLabel:SetText(string.format(selector.format, selector.value))
 	end
 
-	function obj:OnSettingsButtonClicked()
+	function obj:UpdateSettings()
+		local tiling = _G.LEDII_TILE_TILING
+		obj:SetIncrementValue(tilingSettings.tileSizeSelector, tiling.tileSize)
+		obj:SetIncrementValue(tilingSettings.startTilesSelector, tiling.startCount)
+		obj:SetIncrementValue(tilingSettings.xpRateSelector, tiling.xpRate)
+
+		obj:OnTileSizeSelected(tiling.tileSize)
+	end
+
+	function obj:OnSettingsButtonClicked(button, heldCount)
+		if (button ~= "LeftButton") then return end
+		if (heldCount ~= PRESS_UP_COUNT) then return end
+
 		if (tilingSettings.container:IsShown()) then
 			tilingSettings.container:Hide()
+			if (showIntro) then
+				tilingIntro.container:Show()
+			end
 		else
 			tilingSettings.container:Show()
+			tilingIntro.container:Hide()
 		end
 	end
 
-	function obj:OnUnlockButtonClicked(button, custom)
+	function obj:OnUnlockButtonClicked(button, heldCount)
+		if (heldCount ~= PRESS_UP_COUNT) then return end
+
 		local tiling = _G.LEDII_TILE_TILING
-		if (not custom) then return end
 
 		if (button == "LeftButton") then
 			if (tiling.lockMode ~= "Unlocked") then
 				tiling.lockMode = "Unlocked"
+				tilingIntro.container:Hide()
 			else
 				tiling.lockMode = "Locked"
 			end
@@ -659,31 +781,38 @@ local function PrivateClass()
 		end
 	end
 
-	function obj:OnTileSizeSelected(index)
-		--log:Info("OnTileSizeSelected: " .. index)
+	function obj:OnTileSizeSelected(value)
+		--log:Info("OnTileSizeSelected: " .. value)
 
 		local tiling = _G.LEDII_TILE_TILING
-		tiling.tileSize = tileSizeOptions[index]
+		tiling.tileSize = value
 		tiling:Save()
 
+		--Ensure zoom level is max
 		for i = 1, 5 do
 			MinimapZoomIn:Click()
 		end
+		if (value > 50) then MinimapZoomOut:Click() end
+		if (value > 75) then MinimapZoomOut:Click() end
+		if (value > 100) then MinimapZoomOut:Click() end
+		if (value > 125) then MinimapZoomOut:Click() end
+		if (value > 150) then MinimapZoomOut:Click() end
+
 		refreshMap = true
 	end
 
-	function obj:OnStartTilesSelected(index)
+	function obj:OnStartTilesSelected(value)
 		--log:Info("OnStartTilesSelected: " .. index)
 
 		local tiling = _G.LEDII_TILE_TILING
-		tiling:SetStartTiles(startTilesOptions[index])
+		tiling:SetStartTiles(value)
 	end
 
-	function obj:OnXPRateSelected(index)
+	function obj:OnXPRateSelected(value)
 		--log:Info("OnXPRateSelected: " .. index)
 
 		local tiling = _G.LEDII_TILE_TILING
-		tiling.xpRate = xpRateOptions[index]
+		tiling.xpRate = value
 		tiling:Save()
 	end
 	----- PRIVATE END -----
@@ -726,9 +855,10 @@ local function PrivateClass()
 		return frame
 	end
 
-	function obj:CreateButtonFrame(name, parent, enableRightClick, iconFile, insets)
+	function obj:CreateButtonFrame(name, parent, iconFile, insets)
 		local button = CreateFrame("Button", name, parent)
 
+		--Setup font
 		button:SetNormalFontObject("GameFontNormalLarge")
 		local normalFont = button:GetNormalFontObject()
 		normalFont:SetTextColor(1, 1, 1, 1)
@@ -739,11 +869,13 @@ local function PrivateClass()
 		highlightFont:SetTextColor(1, 1, 1, 1)
 		button:SetHighlightFontObject(highlightFont)
 
+		--Setup frame
 		button.frame = obj:CreateBackdropFrame(name .. "_Frame", button, whiteTexture)
 		button.frame:SetAllPoints(button)
 		button.frame:SetBackdropColor(0, 0, 0, 0.5)
 		button.frame:SetFrameLevel(button:GetFrameLevel() - 1)
-
+		
+		--Setup icon
 		if (iconFile ~= nil) then
 			button.icon = button.frame:CreateTexture(nil, "ARTWORK")
 			button.icon:SetTexture(iconFile, "REPEAT", "REPEAT")
@@ -751,22 +883,36 @@ local function PrivateClass()
 			insets = insets or 0 
 			button.icon:SetPoint("TOPLEFT", button.frame, "TOPLEFT", insets, -insets)
 			button.icon:SetPoint("BOTTOMRIGHT", button.frame, "BOTTOMRIGHT", -insets, insets)
+		end
 
-			button:SetScript("OnMouseDown", function(self)
+		--Setup down function
+		button:SetScript("OnMouseDown", function(self, btn)
+			if (self.icon ~= nil) then
 				self.icon:SetPoint("TOPLEFT", self, "TOPLEFT", insets, -insets - 2)
 				self.icon:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -insets, insets - 2)
-			end)
+			end
 
-			button:SetScript("OnMouseUp", function(self, btn)
+			if (self.onMouseHeld ~= nil) then
+				self.heldCount = 0
+				self.heldTimer = C_Timer.NewTicker(0.1, function()
+					self.onMouseHeld(self, btn, self.heldCount)
+					self.heldCount = self.heldCount + 1
+				end)
+			end
+		end)
+
+		--Setup up function
+		button:SetScript("OnMouseUp", function(self, btn)
+			if (self.icon ~= nil) then
 				self.icon:SetPoint("TOPLEFT", self, "TOPLEFT", insets, -insets)
 				self.icon:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", -insets, insets)
+			end
 
-				local clickFunc = self:GetScript("OnClick")
-				if (clickFunc and enableRightClick) then
-					clickFunc(self, btn, true)
-				end
-			end)
-		end
+			if (self.onMouseHeld ~= nil) then
+				self.heldTimer:Cancel()
+				self.onMouseHeld(self, btn, -1)
+			end
+		end)
 
 		return button
 	end
@@ -866,28 +1012,84 @@ local function PrivateClass()
 		selector.previous:SetPoint("LEFT", selector.valueLabel, "LEFT", 0, 0)
 		selector.previous:SetSize(buttonSize, buttonSize)
 		selector.previous.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
-		selector.previous:SetScript("OnClick", function()
+		selector.previous.onMouseHeld = function()
 			selector.index = ((selector.index - 1 - 1 + #selector.optionTexts) % #selector.optionTexts) + 1
 			local option = selector.optionTexts[selector.index]
 			selector.valueLabel:SetText(option)
 			if (callback ~= nil) then
 				callback(nil, selector.index)
 			end
-		end)
+		end
 
 		selector.next = obj:CreateButtonFrame(name .. "_NextButton", selector)
 		selector.next:SetText(">")
 		selector.next:SetPoint("RIGHT", selector.valueLabel, "RIGHT", 0, 0)
 		selector.next:SetSize(buttonSize, buttonSize)
 		selector.next.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
-		selector.next:SetScript("OnClick", function()
+		selector.next.onMouseHeld = function()
 			selector.index = ((selector.index - 1 + 1 + #selector.optionTexts) % #selector.optionTexts) + 1
 			local option = selector.optionTexts[selector.index]
 			selector.valueLabel:SetText(option)
 			if (callback ~= nil) then
 				callback(nil, selector.index)
 			end
-		end)
+		end
+
+		return selector
+	end
+
+	function obj:CreateIncrementFrame(name, parent, label, format, min, max, increment, selectedValue, callback)
+		local selector = obj:CreateContainerFrame(name .. "_Container", parent)
+		selector:SetSize(parent:GetWidth(), 30)
+		selector.value = selectedValue or 50
+		selector.min = min or 0
+		selector.max = max or 100
+		selector.increment = increment or 5
+		selector.format = format or "%d"
+
+		local widthInset = 20
+		local nameWidth = (selector:GetWidth() * 0.5) - widthInset
+		local valueWidth = (selector:GetWidth() * 0.5) - widthInset
+		local buttonSize = 28
+
+		selector.nameLabel = obj:CreateLabelFrame(name .. "_Label", selector)
+		selector.nameLabel:SetText(label or "Property name")
+		selector.nameLabel:SetPoint("LEFT", selector, "LEFT", 20, 0)
+		selector.nameLabel:SetSize(nameWidth, selector:GetHeight())
+		selector.nameLabel:SetJustifyH("LEFT")
+
+		selector.valueLabel = obj:CreateLabelFrame(name .. "_Label", selector)
+		selector.valueLabel:SetText(string.format(selector.format, selector.value))
+		selector.valueLabel:SetPoint("RIGHT", selector, "RIGHT", -20, 0)
+		selector.valueLabel:SetSize(valueWidth, selector:GetHeight())
+
+		selector.previous = obj:CreateButtonFrame(name .. "_PreviousButton", selector)
+		selector.previous:SetText("<")
+		selector.previous:SetPoint("LEFT", selector.valueLabel, "LEFT", 0, 0)
+		selector.previous:SetSize(buttonSize, buttonSize)
+		selector.previous.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
+		selector.previous.onMouseHeld = function(self, button, heldCount)
+			if (heldCount == PRESS_DOWN_COUNT) then return end
+			selector.value = math.max(selector.value - selector.increment, selector.min)
+			selector.valueLabel:SetText(string.format(selector.format, selector.value))
+			if (callback ~= nil) then
+				callback(nil, selector.value)
+			end
+		end
+
+		selector.next = obj:CreateButtonFrame(name .. "_NextButton", selector)
+		selector.next:SetText(">")
+		selector.next:SetPoint("RIGHT", selector.valueLabel, "RIGHT", 0, 0)
+		selector.next:SetSize(buttonSize, buttonSize)
+		selector.next.frame:SetBackdropColor(0.5, 0.1, 0.1, 1)
+		selector.next.onMouseHeld = function(self, button, heldCount)
+			if (heldCount == PRESS_DOWN_COUNT) then return end
+			selector.value = math.min(selector.value + selector.increment, selector.max)
+			selector.valueLabel:SetText(string.format(selector.format, selector.value))
+			if (callback ~= nil) then
+				callback(nil, selector.value)
+			end
+		end
 
 		return selector
 	end

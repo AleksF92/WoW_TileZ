@@ -147,6 +147,7 @@ local function PrivateClass()
 		--Test for special map change null cases
 		--if (true) then return nil end
 
+		--Setup zone
 		data.zoneId = C_Map.GetBestMapForUnit("player")
 		if (data.zoneId ~= nil) then
 			data.zoneName = C_Map.GetMapInfo(data.zoneId).name
@@ -161,6 +162,7 @@ local function PrivateClass()
 		end
 		if (data.zoneId == 0) then return nil end
 
+		--Setup coordinates
 		if (data.continentId ~= nil and data.continentName ~= "Instance") then
 			local worldY, worldX = UnitPosition("player")
 			data.world = { x = worldX, y = worldY }
@@ -171,15 +173,35 @@ local function PrivateClass()
 			data.map = { x = 0, y = 0 }
 		end
 
+		--Setup data
 		data.tile = { x = data.world.x / obj.tileSize , y = data.world.y / obj.tileSize }
 		data.tileId = { x = utils:TruncateNumber(data.tile.x), y = utils:TruncateNumber(data.tile.y) }
 		data.tileSize = obj.tileSize
 		data.tileKey = obj:GetTileKey(data.tile.x, data.tile.y)
 		data.isTransport = obj.lockMode == "Transport"
-		data.allowSetup = totalTiles <= 0
+		data.allowSetup = totalTiles <= 0 and totalInstances <= 0
 
 		if (worldData == nil) then return data end
 
+		--Determine instance wing
+		data.nearestInstanceEntrance = obj:FindNearbyInstanceEntrance(worldData)
+		if (data.nearestInstanceEntrance ~= nil) then
+			--log:Info("Nearest Instance: " .. data.nearestInstanceEntrance.name)
+			LediiData_TileZ_Character.currentInstanceEntrance = data.nearestInstanceEntrance
+
+			if (data.continentName == "Instance") then
+				local wingId = data.nearestInstanceEntrance.entranceId
+				--DOP: Not ready for release yet
+				--data.tileKey = data.tileKey .. "_" .. wingId
+			end
+		else
+			--log:Info("Nearest Instance: nil")
+			if (data.continentName ~= "Instance") then
+				LediiData_TileZ_Character.currentInstanceEntrance = nil
+			end
+		end
+
+		--Try to unlock
 		data.isNewZone = data.zoneId ~= worldData.zoneId
 		data.isNewContinent = data.continentId ~= worldData.continentId
 		if (data.isNewZone and not data.isNewContinent) then
@@ -189,6 +211,44 @@ local function PrivateClass()
 			obj:UnlockCurrentTile(data)
 			data.isUnlocked = obj:IsTileUnlocked(data.tileKey, data.zoneId, data.continentId)
 		end
+
+		return data
+	end
+
+	function obj:FindNearbyInstanceEntrance(worldData)
+		if (worldData.continentName == "Instance") then
+			return LediiData_TileZ_Character.currentInstanceEntrance
+		end
+
+		local nearestDist = math.huge
+		local nearestId = -1
+		local nearestWing = -1
+		local nearestEntrance = -1
+
+		local playerPos = worldData.world
+		local wingData = ledii.instances.wingData
+		for instanceId, wing in pairs(wingData) do
+			for i = 1, #wing.entrances do
+				local wingPos = wing.entrances[i]
+				local dist = utils:DistanceSquared(playerPos, wingPos)
+				if (dist < nearestDist) then
+					nearestDist = dist
+					nearestId = instanceId
+					nearestWing = wing
+					nearestEntrance = i
+				end
+			end
+		end
+
+		if (nearestDist > 100) then return nil end
+
+		local locale = GetLocale()
+		local localizedNames = nearestWing.names[locale] or nearestWing.names["enUS"]
+
+		local data = {}
+		data.instanceId = nearestId
+		data.name = localizedNames[nearestEntrance]
+		data.entranceId = nearestEntrance
 
 		return data
 	end
@@ -334,10 +394,9 @@ local function PrivateClass()
 	end
 
 	function obj:UnlockCurrentTile(unlockData)
-		local tileKey = obj:GetTileKey(unlockData.tile.x, unlockData.tile.y)
+		local tileKey = unlockData.tileKey
 		local zoneId = unlockData.zoneId
 		local continentId = unlockData.continentId
-
 		local cost = obj:GetUnlockCost(unlockData) or 0
 		local isInstance = unlockData.continentName == "Instance"
 		local isZoneBorderException = unlockData.isNewZone and unlockData.isUnlocked and not isInstance
@@ -501,7 +560,7 @@ local function PrivateClass()
 		if (delta < 0) then
 			if (math.abs(delta) <= availableTiles) then
 				log:Info("Removed " .. delta .. " tiles")
-				availableTiles = availableTiles - delta
+				availableTiles = availableTiles + delta
 			else 
 				log:Info("Not enough available tiles to remove")
 			end
