@@ -67,5 +67,6 @@ Logger.lua
 Utility.lua
 UI.lua
 Tiling.lua
+Grouping.lua
 Events.lua
 Console.lua

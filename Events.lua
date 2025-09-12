@@ -2,6 +2,7 @@
 local log = _G.LEDII_TILE_LOG
 local const = _G.LEDII_TILE_CONST
 local tiling = _G.LEDII_TILE_TILING
+local grouping = _G.LEDII_TILE_GROUPING
 
 local function PrivateClass()
 	local obj = {}
@@ -20,6 +21,7 @@ local function PrivateClass()
 		log:Info(_G.LEDII_TILE_WELCOME)
 
 		tiling:OnPlayerLogin() --sometimes fails
+		grouping:OnPlayerLogin()
 	end
 
 	function obj:OnExperienceChanged(xp)
@@ -52,6 +54,10 @@ local function PrivateClass()
 		return output
 	end
 
+	function obj:OnAddonMessage(...)
+		grouping:OnBroadcastReceived(...)
+	end
+
 	return obj
 end
 
@@ -80,6 +86,8 @@ local function OnEvent(self, event, ...)
 		class:OnZoneChanged(false)
 	elseif (event == "ZONE_CHANGED_INDOORS") then
 		class:OnZoneChanged(true)
+	elseif (event == "CHAT_MSG_ADDON") then
+		class:OnAddonMessage(...)
 	end
 end
 
@@ -92,4 +100,5 @@ frame:RegisterEvent("CHAT_MSG_SYSTEM")
 frame:RegisterEvent("QUEST_TURNED_IN")
 frame:RegisterEvent("ZONE_CHANGED")
 frame:RegisterEvent("ZONE_CHANGED_INDOORS")
+frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent", OnEvent)
