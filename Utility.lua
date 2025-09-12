@@ -1,4 +1,4 @@
---print("Loaded <Utility.lua>")obj:BreakGUID
+--print("Loaded <Utility.lua>")
 local const = _G.LEDII_TILE_CONST
 local log = _G.LEDII_TILE_LOG
 
