@@ -15,6 +15,8 @@ local function PrivateClass()
 
 	--Privates
 	local scanTimer = nil
+	local playersToPing = nil
+	local playersWithAddon = nil
 
 	--Public
 	function obj:Setup()
@@ -22,35 +24,24 @@ local function PrivateClass()
 	end
 
 	function obj:OnPlayerLogin()
-		obj:Broadcast("PARTY", { "Login", "PlayerNameHere" })
-		obj:SetScanForPlayers(true)
-	end
-
-	function obj:SetScanForPlayers(enabled)
-		--Clear timer
-		if (scanTimer) then
-			scanTimer:Cancel()
-			scanTimer = nil
-		end
-
-		--Start timer
-		if (enabled) then
-			scanTimer = C_Timer.NewTicker(SCAN_INTERVAL, obj.OnScan)
-		end
+		--obj:Broadcast("PARTY", { "Login", "PlayerNameHere" })
 	end
 
 	function obj:OnScan()
-		obj:Broadcast("PARTY", { "ScanRequest", "PlayerNameHere" })
+		log:Info("Starting scan for players with addon...")
+		playersToPing = {}
+		playersWithAddon = nil
+		C_FriendList.SendWho("")
 	end
 
-	function obj:Broadcast(channel, values)
+	function obj:Broadcast(channel, values, player)
 		local csvMessage = utils:JoinTable(values, ",")
-		--log:Info("Sending addon message: " .. channel .. " | " .. message)
+		--log:Info("[Out]" .. csvMessage)
 
 		if (DEBUG) then
 			C_ChatInfo.SendAddonMessage(ADDON_PREFIX, csvMessage, "WHISPER", UnitName("player"))
 		else
-			C_ChatInfo.SendAddonMessage(ADDON_PREFIX, csvMessage, channel)
+			C_ChatInfo.SendAddonMessage(ADDON_PREFIX, csvMessage, channel, player)
 		end
 	end
 
@@ -60,9 +51,49 @@ local function PrivateClass()
 
 		local values = utils:Split(csvMessage, ",")
 		local type = values[1]
-		local text = values[2]
+		local state = values[2]
 
-		log:Info("Received addon message: " .. type .. " | " .. text)
+		log:Info("[In]: " .. csvMessage)
+
+		if (type == "PingRequest") then
+			local index = tonumber(values[3])
+
+			if (state == "Init") then
+				obj:Broadcast("WHISPER", { type, "Confirm", index }, sender)
+			elseif (state == "Confirm") then
+				table.insert(playersWithAddon, playersToPing[index])
+			end
+		end
+	end
+
+	function obj:OnWhoListUpdate()
+		if (playersToPing == nil) then return end --Not expecting who update
+		if (playersWithAddon ~= nil) then return end --Has received who update
+
+		playersWithAddon = {}
+
+		--Store player info
+        local numWhos = C_FriendList.GetNumWhoResults()
+        for i = 1, numWhos do
+            local player = C_FriendList.GetWhoInfo(i)
+			table.insert(playersToPing, player)
+        end
+
+		--Ping players
+		log:Info("Pinging " .. numWhos .. " from who list...")
+		obj:PingNextPlayer()
+	end
+
+	function obj:PingNextPlayer(index)
+		index = index or 1
+		if (index > #playersToPing) then return end
+
+		local player = playersToPing[index]
+		obj:Broadcast("WHISPER", { "PingRequest", "Init", index, player.fullName }, player.fullName)
+
+		C_Timer.After(0.3, function()
+			obj:PingNextPlayer(index + 1)
+		end)
 	end
 
 	return obj

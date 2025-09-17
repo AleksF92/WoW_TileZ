@@ -2,6 +2,7 @@
 local log = _G.LEDII_TILE_LOG
 local const = _G.LEDII_TILE_CONST
 local tiling = _G.LEDII_TILE_TILING
+local grouping = _G.LEDII_TILE_GROUPING
 local utils = _G.LEDII_TILE_UTILS
 
 local function PrivateClass()
@@ -56,6 +57,10 @@ local function PrivateClass()
 		tiling:OnMeasureStart()
 	end
 
+	function obj:Scan(args)
+		grouping:OnScan()
+	end
+
 	function obj:CollapseArgs(args, n)
 		local keep = {}
 		for i = n, #args do
@@ -86,6 +91,8 @@ function SlashCmdList.LEDII_TILE(msg, editbox)
 		class:Reset(args)
 	--elseif (args[1] == "measure") then
 		--class:Measure(args)
+	elseif(args[1] == "scan") then
+		class:Scan()
 	else
 		class:Help()
 	end
