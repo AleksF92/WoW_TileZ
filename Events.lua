@@ -62,6 +62,10 @@ local function PrivateClass()
 		grouping:OnWhoListUpdate()
 	end
 
+	function obj:OnGroupUpdate()
+		grouping:OnGroupUpdate()
+	end
+
 	return obj
 end
 
@@ -94,6 +98,8 @@ local function OnEvent(self, event, ...)
 		class:OnAddonMessage(...)
 	elseif (event == "WHO_LIST_UPDATE") then
 		class:OnWhoListUpdate()
+	elseif (event == "GROUP_ROSTER_UPDATE") then
+		class:OnGroupUpdate()
 	end
 end
 
@@ -108,4 +114,5 @@ frame:RegisterEvent("ZONE_CHANGED")
 frame:RegisterEvent("ZONE_CHANGED_INDOORS")
 frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:RegisterEvent("WHO_LIST_UPDATE")
+frame:RegisterEvent("GROUP_ROSTER_UPDATE")
 frame:SetScript("OnEvent", OnEvent)

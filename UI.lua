@@ -1093,6 +1093,22 @@ local function PrivateClass()
 
 		return selector
 	end
+
+	function obj:RequestPopupDialog(name, description, acceptText, cancelText, acceptCallback, cancelCallback)
+		StaticPopupDialogs[name] = {
+			text = description,
+			button1 = acceptText or YES,
+			button2 = cancelText or NO,
+			OnAccept = acceptCallback,
+			OnCancel = cancelCallback,
+			timeout = 0,
+			whileDead = true,
+			hideOnEscape = true,
+			preferredIndex = 3
+		}
+
+		StaticPopup_Show(name)
+	end
 	----- UTILITY END -----
 
 	return obj
